@@ -1,0 +1,102 @@
+
+```{r}
+require(ggplot2)
+```
+
+Read and pre-process the files. 
+
+```{r}
+FIBRO <- read.csv("DS_FIBannotations.csv", sep = ",")
+Samples2Keep <- c("H1", "H2", "H3", "H4", "HA", "HB", "HC", "HD", "L1", "L2", "L3", "L4", "LA", "LB", "LC", "LD", "M1", "M2", "M3", "M4", "MA", "MB", "MC", "MD") #With this step we remove some samples that were measured twice. 
+FIBRO <- FIBRO[FIBRO$ID %in% Samples2Keep, ] 
+ESC <- read.csv("DS_ESCannotations.csv", sep = "\t")
+```
+
+#Slope calculation
+
+The aim is having a slope for each sample and each condition (only 5 points per sample -- fib // 2 points per sample -- esc)
+First, we add the column of replicate in order to identify samples (Day column is also missing in ESC samples, so we need to add it as well)
+
+```{r}
+FIBRO$Replicate <- rep.int(c("1", "2"), 60)
+ESC$Replicate <- c(rep.int("0", 5), rep.int(c("1", "2"), 24))
+ESC$Day <- c(rep.int("0", 5), rep.int("2", 24), rep.int("3", 24)) 
+ESC$VitC <- c(rep.int("NO", 5), rep.int(c("0", "0", "1", "1"), 12))
+```
+
+Now we generate a matrix with all the combinations of the conditions (VitC, TMRE status, Oxygen level and replicate)
+
+```{r}
+listConditions <- list(TMRE = c("H", "M", "L"), VitC = c("0", "1"), O2 = c("L", "N"), Replicate = c("1", "2")) 
+ConditionsCombination <- expand.grid(listConditions)
+```
+
+As we will only use some information from the fcs table -- (Day, median FITC, VitC, TMRE status, Oxygen level and replicate)
+
+```{r}
+FIBReduced <- FIBRO[, c("Day", "median_FITC_A", "TMRE", "VitC", "O2", "Replicate", "TMRE_N")]
+ESCReduced <- ESC[, c("Day", "median_FITC_A", "TMRE", "VitC", "O2", "Replicate")]
+```
+
+We need a dataframe for each condition to obtain a linear model, so we will have as many dataframes as rows in ConditionsCombinations df.  
+
+```{r}
+FIBDF2lm <- lapply(seq(1, dim(ConditionsCombination)[1], 1), function(i) FIBReduced[FIBReduced$TMRE == ConditionsCombination[i, "TMRE"] & FIBReduced$VitC == ConditionsCombination[i, "VitC"] & FIBReduced$O2 == ConditionsCombination[i, "O2"] & FIBReduced$Replicate == ConditionsCombination[i, "Replicate"] ,])
+
+ESCDF2lm <- lapply(seq(1, dim(ConditionsCombination)[1], 1), function(i) ESCReduced[ESCReduced$TMRE == ConditionsCombination[i, "TMRE"] & ESCReduced$VitC == ConditionsCombination[i, "VitC"] & ESCReduced$O2 == ConditionsCombination[i, "O2"] & ESCReduced$Replicate == ConditionsCombination[i, "Replicate"] ,])
+```
+
+We obtain linear models and slopes from the previous list of dataframes. 
+
+```{r}
+FIBlmSlopes <- lapply(FIBDF2lm, function(i) lm(log2(median_FITC_A)~Day, data = i[, c("median_FITC_A", "Day")])$coefficients[2]) 
+FIBlmDoubling <- lapply(FIBlmSlopes, function(i) 24*(-1/i))
+FIBSlopesConditions <- cbind.data.frame(t(as.data.frame(FIBlmSlopes)), ConditionsCombination, t(as.data.frame(FIBlmDoubling)))
+names(FIBSlopesConditions) <- c("Slope", "TMRE", "VitC", "O2", "Replicate", "DoublingTime")
+rownames(FIBSlopesConditions) <- seq(1, dim(FIBSlopesConditions)[1], 1)
+FIBSlopesConditions$pasted <- paste(FIBSlopesConditions$TMRE, FIBSlopesConditions$O2, FIBSlopesConditions$VitC)
+FIBSlopesConditions$TMRE_N <- rep(c(1, 2, 3), 8)
+FIBSlopesConditions <- FIBSlopesConditions[order(FIBSlopesConditions$TMRE_N),]
+FIBSlopesConditions$CellType <- "FIB"
+
+ESClmSlopes <- lapply(ESCDF2lm, function(i) lm(log2(median_FITC_A)~Day, data = i[, c("median_FITC_A", "Day")])$coefficients[2]) 
+ESClmDoubling <- lapply(ESClmSlopes, function(i) 24*(-1/i))
+ESCSlopesConditions <- cbind.data.frame(t(as.data.frame(ESClmSlopes)), ConditionsCombination, t(as.data.frame(ESClmDoubling))) 
+names(ESCSlopesConditions) <- c("Slope", "TMRE", "VitC", "O2", "Replicate", "DoublingTime")
+rownames(ESCSlopesConditions) <- seq(1, dim(ESCSlopesConditions)[1], 1)
+ESCSlopesConditions$pasted <- paste(ESCSlopesConditions$TMRE, ESCSlopesConditions$O2, ESCSlopesConditions$VitC)
+ESCSlopesConditions$TMRE_N <- rep(c(1, 2, 3), 8)
+ESCSlopesConditions <- ESCSlopesConditions[order(ESCSlopesConditions$TMRE_N),]
+ESCSlopesConditions$CellType <- "ES"
+
+```
+
+Now we represent them in a barplot.
+
+```{r}
+
+FIBPlot <- ggplot(FIBSlopesConditions, aes(x = reorder(FIBSlopesConditions$pasted, FIBSlopesConditions$TMRE_N), y = FIBSlopesConditions$DoublingTime, colour = FIBSlopesConditions$TMRE, shape = FIBSlopesConditions$O2, alpha = FIBSlopesConditions$VitC)) + geom_point() + theme_bw() + xlab("Conditions") + ylab("Doubling time") + stat_summary(geom = "point", position = "identity", fun.y = mean, shape = 95, size = 10, color = "black", alpha = 0.7) + theme(legend.position = "bottom") + scale_color_manual(values = c("#3B9AB2", "#E1AF00", "#F21A00"), name = "TMRE") + scale_alpha_discrete(range = c(0.5, 1), name = "VitC") + scale_shape(name = "O2")
+FIBPlot
+
+ESCPlot <- ggplot(ESCSlopesConditions, aes(x = reorder(ESCSlopesConditions$pasted, ESCSlopesConditions$TMRE_N), y = ESCSlopesConditions$DoublingTime, colour = ESCSlopesConditions$TMRE, shape = ESCSlopesConditions$O2, alpha = ESCSlopesConditions$VitC)) + geom_point() + theme_bw() + xlab("Conditions") + ylab("Doubling time") + stat_summary(geom = "point", position = "identity", fun.y = mean, shape = 95, size = 10, color = "black", alpha = 0.7) + theme(legend.position = "bottom") + scale_color_manual(values = c("#3B9AB2", "#E1AF00", "#F21A00"), name = "TMRE") + scale_alpha_discrete(range = c(0.5, 1), name = "VitC") + scale_shape(name = "O2")
+ESCPlot
+
+
+```
+
+We also represent an example of the change of CFSE concentration across the days. In this case, we show the three TMRE states in VitC 0 and Normal O2. 
+
+```{r}
+SmallFIBdf <- FIBReduced[FIBReduced$VitC == 0 & FIBReduced$O2 == "N",]
+SmallFIBdf <- SmallFIBdf[order(SmallFIBdf$TMRE_N),]
+ExamplePlot <- ggplot(SmallFIBdf, aes(x = SmallFIBdf$Day, y = log2(SmallFIBdf$median_FITC_A), colour = reorder(SmallFIBdf$TMRE, SmallFIBdf$TMRE_N))) + theme_bw() + scale_color_manual(values = c("#F21A00", "#E1AF00", "#3B9AB2"), name = "TMRE") + xlab("Day") + ylab("FITC signal - log2(median)") + stat_summary(geom = "line", fun.y = mean) + stat_summary(geom = "point", fun.y = mean) + theme(legend.position = "bottom")
+ExamplePlot
+
+```
+
+```{r}
+summary(aov(DoublingTime ~ TMRE + VitC + O2, data = FIBSlopesConditions))
+TukeyHSD(aov(DoublingTime ~ TMRE + VitC + O2, data = FIBSlopesConditions))
+summary(aov(DoublingTime ~ TMRE + VitC + O2, data = ESCSlopesConditions))
+TukeyHSD(aov(DoublingTime ~ TMRE + VitC + O2, data = ESCSlopesConditions))
+```

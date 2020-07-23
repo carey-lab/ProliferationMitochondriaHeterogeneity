@@ -1,0 +1,112 @@
+To generate these files we need: (A) abundance.h5 (located in the cluster). abundance.h5 files are obtained after running kallisto to summarize expression to gene level. 
+(B) Transcript2GeneEnsembl.txt: table w/ transcript 2 gene correspondance. 
+Kallisto was run w/ bootstrap (n = 500)
+
+Import packages
+
+```{r}
+require(tximport)
+require(rhdf5)
+require(Biobase)
+require(gmodels)
+require(matrixStats)
+require(cwhmisc)
+```
+
+*CFSE*
+
+Preparation of the arguments that we will use after.
+
+```{r}
+dir = "." #dir must be the directory that contain the folders from sequencing facility (the ones below)
+CFSEfiles <- c("ES_HH_28875_ACTTGA.kout", "ES_HL_28874_GCCAAT.kout", "ES_MH_28873_ACAGTG.kout", "ES_ML_28872_ATCACG.kout", 
+"Fibro_HH_28879_GTGAAA.kout", "Fibro_HL_28878_CTTGTA.kout", "Fibro_MH_28877_GGCTAC.kout", "Fibro_ML_28876_TAGCTT.kout") #names of folders w/ .h5 files
+CFSEfilesDF <- data.frame(CFSEfiles)
+files <- file.path(dir, CFSEfilesDF$CFSEfiles, "abundance.h5") #complete path to files to summarize
+tx2gene <- read.csv("Transcript2GeneEnsembl.txt", sep = "\t", header = TRUE) #loading the correspondence table (transcript 2 gene)
+```
+
+tximport function imports transcript-level abundance estimated counts and summarizes them to gene level. 
+Arguments: 
+* files = a character vector of filenames for the transcript-level abundances (.h5 in this case)
+* type = character, the type of software used to generate the abundances
+* tx2gene = a two-column data.frame linking transcript id (column 1) to gene id (column 2). the column names are not relevant, but this column order must be used. 
+* ignoreAfterBar = logical, whether to split the tx id on the ’|’ character (default FALSE)
+* ignoreTxVersion = logical, whether to split the tx id on the ’.’ character to remove version information,
+for easier matching with the tx id in gene2tx (default FALSE).
+
+ignoreAfterBar and ignoreTxVersion allows us to process .h5 files without problems. (h5 files have the following 
+identifiers: ENSMUST00000193812.1|ENSMUSG00000102693.1|OTTMUSG00000049935.1|OTTMUST00000127109.1|RP23-271O17.1-001|RP23-271O17.1|1070|TEC|
+and Ensembl correspondence only has ENSMUST00000193812.)
+
+```{r}
+CFSEmatrix <- tximport(files = files, type = "kallisto", tx2gene = tx2gene, ignoreAfterBar = TRUE, ignoreTxVersion = TRUE)
+```
+
+CFSEmatrix is an object that contains different data types. As we did a bootstrap we will work with the median
+of all the bootstraps that we've made (500 in this case). They are in the section InfReps, a list whose 
+length is equal to the number of samples that you are analysing. 
+
+To obtain a matrix similar to the ones that we have worked with before, I need gene expression mean, median and low and high CI (95%).
+
+```{r}
+mean <- lapply(CFSEmatrix$infReps, rowMeans)
+median <- lapply(CFSEmatrix$infReps, rowMedians)
+#Calculate confidence intervals 
+sds <- lapply(CFSEmatrix$infReps, rowSds)
+error <- lapply(sds, function(i) qnorm(0.975)*i/sqrt(500))
+left <- lapply(c(1:8), function(i) mean[[i]] - error[[i]]) #low 95% confidence interval
+right <- lapply(c(1:8), function(i) mean[[i]] + error[[i]]) #high 95% confidence interval
+
+all_binded <- lapply(c(1:8), function(i) cbind(mean[[i]], median[[i]], left[[i]], right[[i]]))
+new_col_names <- c("HH_mean", "HH_median", "HH_lowerCI95", "HH_higherCI95", "HL_mean", "HL_median", "HL_lowerCI95", "HL_higherCI95", 
+"MH_mean", "MH_median", "MH_lowerCI95", "MH_higherCI95", "ML_mean", "ML_median", "ML_lowerCI95", "ML_higherCI95")
+
+EStable <- cbind(all_binded[[1]], all_binded[[2]], all_binded[[3]], all_binded[[4]]) 
+FIBtable <- cbind(all_binded[[5]], all_binded[[6]], all_binded[[7]], all_binded[[8]])
+colnames(EStable) <- new_col_names
+colnames(FIBtable) <- new_col_names
+
+write.table(x = EStable, file = "./ES_CFSESep2018.tsv", sep = "\t", col.names = NA, quote = FALSE, row.names = TRUE)
+write.table(x = FIBtable, file = "./FIB_CFSESep2018.tsv", sep = "\t", col.names = NA, quote = FALSE, row.names = TRUE)
+```
+
+*TMRE* 
+
+```{r}
+dir = "."
+TMREfiles <- c("VM18_merES_1_high_28881_CGATGT.kout", "VM18_merES_1_low_28880_ATCACG.kout", "VM18_merES_2_high_28883_TGACCA.kout", 
+"VM18_merES_2_low_28882_TTAGGC.kout", "VM18_merES_3_high_28885_GCCAAT.kout", "VM18_merES_3_low_28884_ACAGTG.kout", 
+"VM18_merES_4_high_28887_ACTTGA.kout", "VM18_merES_4_low_28886_CAGATC.kout", "VM18_merF1_high_28889_TAGCTT.kout", 
+"VM18_merF1_low_28888_GATCAG.kout", "VM18_merF2_low_28890_GGCTAC.kout", "VM18_merF3_high_28893_AGTTCC.kout", 
+"VM18_merF3_low_28892_AGTCAA.kout", "VM18_merF4_high_28895_CCGTCC.kout", "VM18_merF4_low_28894_ATGTCA.kout")  
+TMREfilesDF <- data.frame(TMREfiles)
+files <- file.path(dir, TMREfilesDF$TMREfiles, "abundance.h5") 
+```
+
+```{r}
+TMREmatrix <- tximport(files = files, type = "kallisto", tx2gene = tx2gene, ignoreAfterBar = TRUE, ignoreTxVersion = TRUE)
+```
+
+```{r}
+mean <- lapply(TMREmatrix$infReps, rowMeans)
+median <- lapply(TMREmatrix$infReps, rowMedians)
+#Calculate confidence intervals 
+sds <- lapply(TMREmatrix$infReps, rowSds)
+error <- lapply(sds, function(i) qnorm(0.975)*i/sqrt(500))
+left <- lapply(c(1:15), function(i) mean[[i]] - error[[i]])#low 95% confidence interval
+right <- lapply(c(1:15), function(i) mean[[i]] + error[[i]])#high 95% confidence interval
+
+all_binded <- lapply(c(1:15), function(i) cbind(mean[[i]], median[[i]], left[[i]], right[[i]])) 
+new_col_namesES <- c("ES_1_high_mean", "ES_1_high_median", "ES_1_high_lowerCI95", "ES_1_high_higherCI95", "ES_1_low_mean", "ES_1_low_median", "ES_1_low_lowerCI95", "ES_1_low_higherCI95", "ES_2_high_mean", "ES_2_high_median", "ES_2_high_lowerCI95", "ES_2_high_higherCI95", "ES_2_low_mean", "ES_2_low_median", "ES_2_low_lowerCI95", "ES_2_low_higherCI95", "ES_3_high_mean", "ES_3_high_median", "ES_3_high_lowerCI95", "ES_3_high_higherCI95", "ES_3_low_mean", "ES_3_low_median", "ES_3_low_lowerCI95", "ES_3_low_higherCI95", "ES_4_high_mean", "ES_4_high_median", "ES_4_high_lowerCI95", "ES_4_high_higherCI95", "ES_4_low_mean", "ES_4_low_median", "ES_4_low_lowerCI95", "ES_4_low_higherCI95")
+new_col_namesFIB <- c("FIB_1_high_mean", "FIB_1_high_median", "FIB_1_high_lowerCI95", "FIB_1_high_higherCI95", "FIB_1_low_mean", "FIB_1_low_median", "FIB_1_low_lowerCI95", "FIB_1_low_higherCI95", "FIB_2_low_mean", "FIB_2_low_median", "FIB_2_low_lowerCI95", "FIB_2_low_higherCI95", "FIB_3_high_mean", "FIB_3_high_median", "FIB_3_high_lowerCI95", "FIB_3_high_higherCI95", "FIB_3_low_mean", "FIB_3_low_median", "FIB_3_low_lowerCI95", "FIB_3_low_higherCI95", "FIB_4_high_mean", "FIB_4_high_median", "FIB_4_high_lowerCI95", "FIB_4_high_higherCI95", "FIB_4_low_mean", "FIB_4_low_median", "FIB_4_low_lowerCI95", "FIB_4_low_higherCI95")
+
+EStable <- cbind(all_binded[[1]], all_binded[[2]], all_binded[[3]], all_binded[[4]], all_binded[[5]], all_binded[[6]], all_binded[[7]], all_binded[[8]])
+FIBtable <- cbind(all_binded[[9]], all_binded[[10]], all_binded[[11]], all_binded[[12]], all_binded[[13]], all_binded[[14]], all_binded[[15]])
+colnames(EStable) <- new_col_namesES
+colnames(FIBtable) <- new_col_namesFIB
+
+write.table(x = EStable, file = "ES_TMRESep2018.tsv", sep = "\t", col.names = NA, quote = FALSE, row.names = TRUE)
+write.table(x = FIBtable, file = "FIB_TMRESep2018.tsv", sep = "\t", col.names = NA, quote = FALSE, row.names = TRUE)
+```
+

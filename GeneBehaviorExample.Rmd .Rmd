@@ -1,0 +1,238 @@
+
+Load packages.
+
+```{r}
+require(ggplot2)
+require(reshape2)
+require(gtools)
+```
+
+Load RNA counts files from both experiments and uniformize gene ID. 
+FIB2016 & ESC2016: first sequencing experiment. 
+FIB2018 & ESC2018: last sequencing experiment, only showing the ones from CFSE experiment.
+
+```{r}
+FIB2016 <- read.csv("FIBBehavGroups.tsv", sep = "\t", header = TRUE)
+FIB2016$X <- substr(FIB2016$X, 1, 18)
+ESC2016 <- read.csv("ESCBehavGroups.tsv", sep = "\t", header = TRUE)
+ESC2016$X <- substr(ESC2016$X, 1, 18)
+
+FIB2018 <- read.csv("FIB_CFSESep2018.tsv", sep = "\t", header = TRUE)
+ESC2018 <- read.csv("ES_CFSESep2018.tsv", sep = "\t", header = TRUE)
+```
+
+As we want to plot specific genes, we extract their ENSEMBL ID from the whole dataframe. In this case Cct2 - threonyl-tRNA synthetase - ENS: ENSMUSG00000001020, Pmaip1 - phorbol-12-myristate-13-acetate-induced protein 1 - ENS: ENSMUSG00000024521, Tnfrsf21rsf21 - tumor necrosis factor receptor superfamily, member 21 - ENS: ENSMUSG00000023915). 
+
+```{r}
+Columns2Keep2016S1 <- c("S1_TPM", "S1_TPM_95CI_low", "S1_TPM_95CI_high")
+Columns2Keep2016F1 <- c("F1_TPM", "F1_TPM_95CI_low", "F1_TPM_95CI_high") 
+Columns2Keep2016S2 <- c("S2_TPM", "S2_TPM_95CI_low", "S2_TPM_95CI_high") 
+Columns2Keep2016F2 <- c("F2_TPM", "F2_TPM_95CI_low", "F2_TPM_95CI_high")
+
+Columns2Keep2018S1 <- c("HH_median", "HH_lowerCI95", "HH_higherCI95") 
+Columns2Keep2018F1 <- c("HL_median", "HL_lowerCI95", "HL_higherCI95")
+Columns2Keep2018S2 <- c("MH_median", "MH_lowerCI95", "MH_higherCI95")
+Columns2Keep2018F2 <- c("ML_median", "ML_lowerCI95", "ML_higherCI95")
+
+NewColNames <- c("median", "lowerCI", "higherCI")
+
+PmaipFIB16S1 <- FIB2016[FIB2016$X == "ENSMUSG00000024521", Columns2Keep2016S1]
+colnames(PmaipFIB16S1) <- NewColNames
+PmaipFIB16F1 <- FIB2016[FIB2016$X == "ENSMUSG00000024521", Columns2Keep2016F1]
+colnames(PmaipFIB16F1) <- NewColNames
+PmaipFIB16S2 <- FIB2016[FIB2016$X == "ENSMUSG00000024521", Columns2Keep2016S2]
+colnames(PmaipFIB16S2) <- NewColNames
+PmaipFIB16F2 <- FIB2016[FIB2016$X == "ENSMUSG00000024521", Columns2Keep2016F2]
+colnames(PmaipFIB16F2) <- NewColNames
+
+PmaipFIB18S1 <- FIB2018[FIB2018$X == "ENSMUSG00000024521", Columns2Keep2018S1]
+PmaipFIB18F1 <- FIB2018[FIB2018$X == "ENSMUSG00000024521", Columns2Keep2018F1]
+PmaipFIB18S2 <- FIB2018[FIB2018$X == "ENSMUSG00000024521", Columns2Keep2018S2]
+PmaipFIB18F2 <- FIB2018[FIB2018$X == "ENSMUSG00000024521", Columns2Keep2018F2]
+colnames(PmaipFIB18S1) <- NewColNames
+colnames(PmaipFIB18F1) <- NewColNames
+colnames(PmaipFIB18S2) <- NewColNames
+colnames(PmaipFIB18F2) <- NewColNames
+
+PmaipESC16S1 <- ESC2016[ESC2016$X == "ENSMUSG00000024521", Columns2Keep2016S1]
+PmaipESC16F1 <- ESC2016[ESC2016$X == "ENSMUSG00000024521", Columns2Keep2016F1]
+PmaipESC16S2 <- ESC2016[ESC2016$X == "ENSMUSG00000024521", Columns2Keep2016S2]
+PmaipESC16F2 <- ESC2016[ESC2016$X == "ENSMUSG00000024521", Columns2Keep2016F2]
+colnames(PmaipESC16S1) <- NewColNames
+colnames(PmaipESC16F1) <- NewColNames
+colnames(PmaipESC16S2) <- NewColNames
+colnames(PmaipESC16F2) <- NewColNames
+
+PmaipESC18S1 <- ESC2018[ESC2018$X == "ENSMUSG00000024521", Columns2Keep2018S1]
+PmaipESC18F1 <- ESC2018[ESC2018$X == "ENSMUSG00000024521", Columns2Keep2018F1]
+PmaipESC18S2 <- ESC2018[ESC2018$X == "ENSMUSG00000024521", Columns2Keep2018S2]
+PmaipESC18F2 <- ESC2018[ESC2018$X == "ENSMUSG00000024521", Columns2Keep2018F2]
+colnames(PmaipESC18S1) <- NewColNames
+colnames(PmaipESC18F1) <- NewColNames
+colnames(PmaipESC18S2) <- NewColNames
+colnames(PmaipESC18F2) <- NewColNames
+
+Pmaip18 <- smartbind(PmaipFIB18S1, PmaipFIB18F1, PmaipFIB18S2, PmaipFIB18F2, PmaipESC18S1, PmaipESC18F1, PmaipESC18S2, PmaipESC18F2)
+
+Pmaip16 <- smartbind(PmaipFIB16S1, PmaipFIB16F1, PmaipFIB16S2, PmaipFIB16F2, PmaipESC16S1, PmaipESC16F1, PmaipESC16S2, PmaipESC16F2)
+
+ProlifIndex <- rep(c("Slow", "Fast"), 8)
+CellType <- rep(c(rep("FIB", 4), rep("ESC", 4)), 2)
+Replicate <- rep(c(rep(1, 2), rep(2, 2)), 4)
+SeqTime <- c(rep(2016, 8), rep(2018, 8))
+
+Pmaip <- smartbind(Pmaip16, Pmaip18)
+Pmaip$ProlifIndex <- ProlifIndex
+Pmaip$CellType <- CellType
+Pmaip$Replicate <- Replicate 
+Pmaip$SeqTime <- SeqTime
+Pmaip$all <- paste(SeqTime, CellType, Replicate)
+```
+
+```{r}
+PmaipPlot <- ggplot(Pmaip, aes(x = factor(Pmaip$ProlifIndex, levels = rev(levels(factor(Tnfrsf21$ProlifIndex)))), y = log2(Pmaip$median), group = Pmaip$all, color = Pmaip$CellType), shape =Pmaip$SeqTime) + geom_line(aes(linetype = factor(Pmaip$Replicate))) + geom_point() + geom_errorbar(width = 0.05, aes(ymin = log2(Pmaip$lowerCI), ymax = log2(Pmaip$higherCI))) + scale_color_manual(values = c("#903B6F", "#538135")) + ylab("log2(TPM)") + xlab("") + theme_bw() + theme(legend.title = element_blank(), plot.title = element_text(hjust = 0.5)) + ggtitle("Pmaip1")
+PmaipPlot
+```
+
+```{r}
+Columns2Keep2016S1 <- c("S1_TPM", "S1_TPM_95CI_low", "S1_TPM_95CI_high")
+Columns2Keep2016F1 <- c("F1_TPM", "F1_TPM_95CI_low", "F1_TPM_95CI_high") 
+Columns2Keep2016S2 <- c("S2_TPM", "S2_TPM_95CI_low", "S2_TPM_95CI_high") 
+Columns2Keep2016F2 <- c("F2_TPM", "F2_TPM_95CI_low", "F2_TPM_95CI_high")
+
+Columns2Keep2018S1 <- c("HH_median", "HH_lowerCI95", "HH_higherCI95") 
+Columns2Keep2018F1 <- c("HL_median", "HL_lowerCI95", "HL_higherCI95")
+Columns2Keep2018S2 <- c("MH_median", "MH_lowerCI95", "MH_higherCI95")
+Columns2Keep2018F2 <- c("ML_median", "ML_lowerCI95", "ML_higherCI95")
+
+NewColNames <- c("median", "lowerCI", "higherCI")
+
+Cct2FIB16S1 <- FIB2016[FIB2016$X == "ENSMUSG00000034024", Columns2Keep2016S1]
+colnames(Cct2FIB16S1) <- NewColNames
+Cct2FIB16F1 <- FIB2016[FIB2016$X == "ENSMUSG00000034024", Columns2Keep2016F1]
+colnames(Cct2FIB16F1) <- NewColNames
+Cct2FIB16S2 <- FIB2016[FIB2016$X == "ENSMUSG00000034024", Columns2Keep2016S2]
+colnames(Cct2FIB16S2) <- NewColNames
+Cct2FIB16F2 <- FIB2016[FIB2016$X == "ENSMUSG00000034024", Columns2Keep2016F2]
+colnames(Cct2FIB16F2) <- NewColNames
+
+Cct2FIB18S1 <- FIB2018[FIB2018$X == "ENSMUSG00000034024", Columns2Keep2018S1]
+Cct2FIB18F1 <- FIB2018[FIB2018$X == "ENSMUSG00000034024", Columns2Keep2018F1]
+Cct2FIB18S2 <- FIB2018[FIB2018$X == "ENSMUSG00000034024", Columns2Keep2018S2]
+Cct2FIB18F2 <- FIB2018[FIB2018$X == "ENSMUSG00000034024", Columns2Keep2018F2]
+colnames(Cct2FIB18S1) <- NewColNames
+colnames(Cct2FIB18F1) <- NewColNames
+colnames(Cct2FIB18S2) <- NewColNames
+colnames(Cct2FIB18F2) <- NewColNames
+
+Cct2ESC16S1 <- ESC2016[ESC2016$X == "ENSMUSG00000034024", Columns2Keep2016S1]
+Cct2ESC16F1 <- ESC2016[ESC2016$X == "ENSMUSG00000034024", Columns2Keep2016F1]
+Cct2ESC16S2 <- ESC2016[ESC2016$X == "ENSMUSG00000034024", Columns2Keep2016S2]
+Cct2ESC16F2 <- ESC2016[ESC2016$X == "ENSMUSG00000034024", Columns2Keep2016F2]
+colnames(Cct2ESC16S1) <- NewColNames
+colnames(Cct2ESC16F1) <- NewColNames
+colnames(Cct2ESC16S2) <- NewColNames
+colnames(Cct2ESC16F2) <- NewColNames
+
+Cct2ESC18S1 <- ESC2018[ESC2018$X == "ENSMUSG00000034024", Columns2Keep2018S1]
+Cct2ESC18F1 <- ESC2018[ESC2018$X == "ENSMUSG00000034024", Columns2Keep2018F1]
+Cct2ESC18S2 <- ESC2018[ESC2018$X == "ENSMUSG00000034024", Columns2Keep2018S2]
+Cct2ESC18F2 <- ESC2018[ESC2018$X == "ENSMUSG00000034024", Columns2Keep2018F2]
+colnames(Cct2ESC18S1) <- NewColNames
+colnames(Cct2ESC18F1) <- NewColNames
+colnames(Cct2ESC18S2) <- NewColNames
+colnames(Cct2ESC18F2) <- NewColNames
+
+Cct218 <- smartbind(Cct2FIB18S1, Cct2FIB18F1, Cct2FIB18S2, Cct2FIB18F2, Cct2ESC18S1, Cct2ESC18F1, Cct2ESC18S2, Cct2ESC18F2)
+
+Cct216 <- smartbind(Cct2FIB16S1, Cct2FIB16F1, Cct2FIB16S2, Cct2FIB16F2, Cct2ESC16S1, Cct2ESC16F1, Cct2ESC16S2, Cct2ESC16F2)
+
+ProlifIndex <- rep(c("Slow", "Fast"), 8)
+CellType <- rep(c(rep("FIB", 4), rep("ESC", 4)), 2)
+Replicate <- rep(c(rep(1, 2), rep(2, 2)), 4)
+SeqTime <- c(rep(2016, 8), rep(2018, 8))
+
+Cct2 <- smartbind(Cct216, Cct218)
+Cct2$ProlifIndex <- ProlifIndex
+Cct2$CellType <- CellType
+Cct2$Replicate <- Replicate 
+Cct2$SeqTime <- SeqTime
+Cct2$all <- paste(SeqTime, CellType, Replicate)
+```
+
+```{r}
+Cct2Plot <- ggplot(Cct2, aes(x = factor(Cct2$ProlifIndex, levels = rev(levels(factor(Tnfrsf21$ProlifIndex)))), y = log2(Cct2$median), group = Cct2$all, color = Cct2$CellType, shape = factor(Cct2$SeqTime))) + geom_line(aes(linetype = factor(Cct2$Replicate))) + geom_point() + geom_errorbar(width = 0.05, aes(ymin = log2(Cct2$lowerCI), ymax = log2(Cct2$higherCI))) + scale_color_manual(values = c("#903B6F", "#538135")) + ylab("log2(TPM)") + xlab("") + theme_bw() + theme(legend.title = element_blank(), plot.title = element_text(hjust = 0.5)) + ggtitle("Cct2")
+Cct2Plot 
+```
+
+
+```{r}
+Columns2Keep2016S1 <- c("S1_TPM", "S1_TPM_95CI_low", "S1_TPM_95CI_high")
+Columns2Keep2016F1 <- c("F1_TPM", "F1_TPM_95CI_low", "F1_TPM_95CI_high") 
+Columns2Keep2016S2 <- c("S2_TPM", "S2_TPM_95CI_low", "S2_TPM_95CI_high") 
+Columns2Keep2016F2 <- c("F2_TPM", "F2_TPM_95CI_low", "F2_TPM_95CI_high")
+
+Columns2Keep2018S1 <- c("HH_median", "HH_lowerCI95", "HH_higherCI95") 
+Columns2Keep2018F1 <- c("HL_median", "HL_lowerCI95", "HL_higherCI95")
+Columns2Keep2018S2 <- c("MH_median", "MH_lowerCI95", "MH_higherCI95")
+Columns2Keep2018F2 <- c("ML_median", "ML_lowerCI95", "ML_higherCI95")
+
+NewColNames <- c("median", "lowerCI", "higherCI")
+
+Tnfrsf21FIB16S1 <- FIB2016[FIB2016$X == "ENSMUSG00000023915", Columns2Keep2016S1]
+colnames(Tnfrsf21FIB16S1) <- NewColNames
+Tnfrsf21FIB16F1 <- FIB2016[FIB2016$X == "ENSMUSG00000023915", Columns2Keep2016F1]
+colnames(Tnfrsf21FIB16F1) <- NewColNames
+Tnfrsf21FIB16S2 <- FIB2016[FIB2016$X == "ENSMUSG00000023915", Columns2Keep2016S2]
+colnames(Tnfrsf21FIB16S2) <- NewColNames
+Tnfrsf21FIB16F2 <- FIB2016[FIB2016$X == "ENSMUSG00000023915", Columns2Keep2016F2]
+colnames(Tnfrsf21FIB16F2) <- NewColNames
+
+Tnfrsf21FIB18S1 <- FIB2018[FIB2018$X == "ENSMUSG00000023915", Columns2Keep2018S1]
+Tnfrsf21FIB18F1 <- FIB2018[FIB2018$X == "ENSMUSG00000023915", Columns2Keep2018F1]
+Tnfrsf21FIB18S2 <- FIB2018[FIB2018$X == "ENSMUSG00000023915", Columns2Keep2018S2]
+Tnfrsf21FIB18F2 <- FIB2018[FIB2018$X == "ENSMUSG00000023915", Columns2Keep2018F2]
+colnames(Tnfrsf21FIB18S1) <- NewColNames
+colnames(Tnfrsf21FIB18F1) <- NewColNames
+colnames(Tnfrsf21FIB18S2) <- NewColNames
+colnames(Tnfrsf21FIB18F2) <- NewColNames
+
+Tnfrsf21ESC16S1 <- ESC2016[ESC2016$X == "ENSMUSG00000023915", Columns2Keep2016S1]
+Tnfrsf21ESC16F1 <- ESC2016[ESC2016$X == "ENSMUSG00000023915", Columns2Keep2016F1]
+Tnfrsf21ESC16S2 <- ESC2016[ESC2016$X == "ENSMUSG00000023915", Columns2Keep2016S2]
+Tnfrsf21ESC16F2 <- ESC2016[ESC2016$X == "ENSMUSG00000023915", Columns2Keep2016F2]
+colnames(Tnfrsf21ESC16S1) <- NewColNames
+colnames(Tnfrsf21ESC16F1) <- NewColNames
+colnames(Tnfrsf21ESC16S2) <- NewColNames
+colnames(Tnfrsf21ESC16F2) <- NewColNames
+
+Tnfrsf21ESC18S1 <- ESC2018[ESC2018$X == "ENSMUSG00000023915", Columns2Keep2018S1]
+Tnfrsf21ESC18F1 <- ESC2018[ESC2018$X == "ENSMUSG00000023915", Columns2Keep2018F1]
+Tnfrsf21ESC18S2 <- ESC2018[ESC2018$X == "ENSMUSG00000023915", Columns2Keep2018S2]
+Tnfrsf21ESC18F2 <- ESC2018[ESC2018$X == "ENSMUSG00000023915", Columns2Keep2018F2]
+colnames(Tnfrsf21ESC18S1) <- NewColNames
+colnames(Tnfrsf21ESC18F1) <- NewColNames
+colnames(Tnfrsf21ESC18S2) <- NewColNames
+colnames(Tnfrsf21ESC18F2) <- NewColNames
+
+Tnfrsf2118 <- smartbind(Tnfrsf21FIB18S1, Tnfrsf21FIB18F1, Tnfrsf21FIB18S2, Tnfrsf21FIB18F2, Tnfrsf21ESC18S1, Tnfrsf21ESC18F1, Tnfrsf21ESC18S2, Tnfrsf21ESC18F2)
+
+Tnfrsf2116 <- smartbind(Tnfrsf21FIB16S1, Tnfrsf21FIB16F1, Tnfrsf21FIB16S2, Tnfrsf21FIB16F2, Tnfrsf21ESC16S1, Tnfrsf21ESC16F1, Tnfrsf21ESC16S2, Tnfrsf21ESC16F2)
+
+ProlifIndex <- rep(c("Slow", "Fast"), 8)
+CellType <- rep(c(rep("FIB", 4), rep("ESC", 4)), 2)
+Replicate <- rep(c(rep(1, 2), rep(2, 2)), 4)
+SeqTime <- c(rep(2016, 8), rep(2018, 8))
+
+Tnfrsf21 <- smartbind(Tnfrsf2116, Tnfrsf2118)
+Tnfrsf21$ProlifIndex <- ProlifIndex
+Tnfrsf21$CellType <- CellType
+Tnfrsf21$Replicate <- Replicate 
+Tnfrsf21$SeqTime <- SeqTime
+Tnfrsf21$all <- paste(SeqTime, CellType, Replicate)
+```
+
+```{r}
+Tnfrsf21Plot <- ggplot(Tnfrsf21, aes(x = factor(Tnfrsf21$ProlifIndex, levels = rev(levels(factor(Tnfrsf21$ProlifIndex)))), y = log2(Tnfrsf21$median), group = Tnfrsf21$all, shape = factor(Tnfrsf21$SeqTime), color = Tnfrsf21$CellType)) + geom_line(aes(linetype = factor(Tnfrsf21$Replicate))) + geom_point() + geom_errorbar(width = 0.05, aes(ymin = log2(Tnfrsf21$lowerCI), ymax = log2(Tnfrsf21$higherCI))) + scale_color_manual(values = c("#903B6F", "#538135")) + ylab("log2(TPM)") + xlab("") + theme_bw() + theme(legend.title = element_blank(), plot.title = element_text(hjust = 0.5)) + ggtitle("Tnfrsf21")
+Tnfrsf21Plot
+```

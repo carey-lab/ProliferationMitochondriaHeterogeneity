@@ -1,0 +1,161 @@
+
+Load packages.
+
+```{r}
+require(ggplot2)
+require(reshape2)
+require(gtools)
+```
+
+Load RNA counts files from both experiments and uniformize gene ID. 
+FIB2018 & ESC2018: last sequencing experiment, only showing the ones from CFSE experiment.
+
+```{r}
+FIB2018 <- read.csv("FIB_CFSESep2018.tsv", sep = "\t", header = TRUE)
+ESC2018 <- read.csv("ES_CFSESep2018.tsv", sep = "\t", header = TRUE)
+```
+
+With this figure we want to exemplify the possible gene behaviors that we can find in our samples:
+* Increasing with proliferation in both samples: Tars - threonyl-tRNA synthetase - ENS: ENSMUSG00000022241
+* Decreasing with proliferation in both samples: Pmaip1 - phorbol-12-myristate-13-acetate-induced protein 1 - ENS: ENSMUSG00000022241
+* Opposite behavior in both samples: Tnfrsf21 - tumor necrosis factor receptor superfamily, member 21 - ENS: ENSMUSG00000023915). 
+
+We will use only the columns of our interest in this sample.
+In this case we consider all samples starting with H (HH and HL) as replicate 1 and the ones starting with M (MH and ML) as replicate 2. 
+The ones ending with H (MH and HH) are the slow proliferating populations, since their concentration of CFSE is higher. Then, we will consider ML and HL as fast proliferating populations. 
+
+```{r}
+Columns2Keep2018S1 <- c("HH_median", "HH_lowerCI95", "HH_higherCI95") #Slow replicate 1
+Columns2Keep2018F1 <- c("HL_median", "HL_lowerCI95", "HL_higherCI95") #Fast replicate 1
+Columns2Keep2018S2 <- c("MH_median", "MH_lowerCI95", "MH_higherCI95") #Slow replicate 2
+Columns2Keep2018F2 <- c("ML_median", "ML_lowerCI95", "ML_higherCI95") #Fast replicate 2
+
+NewColNames <- c("median", "lowerCI", "higherCI")
+
+PmaipFIB18S1 <- FIB2018[FIB2018$X == "ENSMUSG00000024521", Columns2Keep2018S1]
+PmaipFIB18F1 <- FIB2018[FIB2018$X == "ENSMUSG00000024521", Columns2Keep2018F1]
+PmaipFIB18S2 <- FIB2018[FIB2018$X == "ENSMUSG00000024521", Columns2Keep2018S2]
+PmaipFIB18F2 <- FIB2018[FIB2018$X == "ENSMUSG00000024521", Columns2Keep2018F2]
+colnames(PmaipFIB18S1) <- NewColNames
+colnames(PmaipFIB18F1) <- NewColNames
+colnames(PmaipFIB18S2) <- NewColNames
+colnames(PmaipFIB18F2) <- NewColNames
+
+PmaipESC18S1 <- ESC2018[ESC2018$X == "ENSMUSG00000024521", Columns2Keep2018S1]
+PmaipESC18F1 <- ESC2018[ESC2018$X == "ENSMUSG00000024521", Columns2Keep2018F1]
+PmaipESC18S2 <- ESC2018[ESC2018$X == "ENSMUSG00000024521", Columns2Keep2018S2]
+PmaipESC18F2 <- ESC2018[ESC2018$X == "ENSMUSG00000024521", Columns2Keep2018F2]
+colnames(PmaipESC18S1) <- NewColNames
+colnames(PmaipESC18F1) <- NewColNames
+colnames(PmaipESC18S2) <- NewColNames
+colnames(PmaipESC18F2) <- NewColNames
+
+Pmaip <- smartbind(PmaipFIB18S1, PmaipFIB18F1, PmaipFIB18S2, PmaipFIB18F2, PmaipESC18S1, PmaipESC18F1, PmaipESC18S2, PmaipESC18F2)
+
+ProlifIndex <- rep(c("Slow", "Fast"), 4)
+CellType <- rep(c(rep("FIB", 4), rep("ESC", 4)))
+Replicate <- rep(c(rep(1, 2), rep(2, 2)), 2)
+
+Pmaip$ProlifIndex <- ProlifIndex
+Pmaip$CellType <- CellType
+Pmaip$Replicate <- Replicate 
+Pmaip$all <- paste(CellType, Replicate)
+```
+
+```{r}
+PmaipPlot <- ggplot(Pmaip, aes(x = factor(Pmaip$ProlifIndex, levels = rev(levels(factor(Pmaip$ProlifIndex)))), y = log2(Pmaip$median), group = Pmaip$all, color = Pmaip$CellType)) + geom_line(aes(linetype = factor(Pmaip$Replicate))) + geom_point() + geom_errorbar(width = 0.1, aes(ymin = log2(Pmaip$lowerCI), ymax = log2(Pmaip$higherCI))) + scale_color_manual(values = c("#538135", "#903B6F")) + ylab("log2(TPM)") + xlab("") + theme_bw() + theme(legend.title = element_blank(), plot.title = element_text(hjust = 0.5)) + ggtitle("Pmaip1")
+PmaipPlot
+ggsave(PmaipPlot, filename = "Pmaip1_2018.pdf", width = 4, height = 4)
+```
+
+```{r}
+Columns2Keep2018S1 <- c("HH_median", "HH_lowerCI95", "HH_higherCI95") 
+Columns2Keep2018F1 <- c("HL_median", "HL_lowerCI95", "HL_higherCI95")
+Columns2Keep2018S2 <- c("MH_median", "MH_lowerCI95", "MH_higherCI95")
+Columns2Keep2018F2 <- c("ML_median", "ML_lowerCI95", "ML_higherCI95")
+
+NewColNames <- c("median", "lowerCI", "higherCI")
+
+TarsFIB18S1 <- FIB2018[FIB2018$X == "ENSMUSG00000022241", Columns2Keep2018S1]
+TarsFIB18F1 <- FIB2018[FIB2018$X == "ENSMUSG00000022241", Columns2Keep2018F1]
+TarsFIB18S2 <- FIB2018[FIB2018$X == "ENSMUSG00000022241", Columns2Keep2018S2]
+TarsFIB18F2 <- FIB2018[FIB2018$X == "ENSMUSG00000022241", Columns2Keep2018F2]
+colnames(TarsFIB18S1) <- NewColNames
+colnames(TarsFIB18F1) <- NewColNames
+colnames(TarsFIB18S2) <- NewColNames
+colnames(TarsFIB18F2) <- NewColNames
+
+TarsESC18S1 <- ESC2018[ESC2018$X == "ENSMUSG00000022241", Columns2Keep2018S1]
+TarsESC18F1 <- ESC2018[ESC2018$X == "ENSMUSG00000022241", Columns2Keep2018F1]
+TarsESC18S2 <- ESC2018[ESC2018$X == "ENSMUSG00000022241", Columns2Keep2018S2]
+TarsESC18F2 <- ESC2018[ESC2018$X == "ENSMUSG00000022241", Columns2Keep2018F2]
+colnames(TarsESC18S1) <- NewColNames
+colnames(TarsESC18F1) <- NewColNames
+colnames(TarsESC18S2) <- NewColNames
+colnames(TarsESC18F2) <- NewColNames
+
+Tars <- smartbind(TarsFIB18S1, TarsFIB18F1, TarsFIB18S2, TarsFIB18F2, TarsESC18S1, TarsESC18F1, TarsESC18S2, TarsESC18F2)
+
+ProlifIndex <- rep(c("Slow", "Fast"), 4)
+CellType <- rep(c(rep("FIB", 4), rep("ESC", 4)))
+Replicate <- rep(c(rep(1, 2), rep(2, 2)), 2)
+
+Tars$ProlifIndex <- ProlifIndex
+Tars$CellType <- CellType
+Tars$Replicate <- Replicate 
+Tars$all <- paste(CellType, Replicate)
+
+```
+
+```{r}
+TarsPlot <- ggplot(Tars, aes(x = factor(Tars$ProlifIndex, levels = rev(levels(factor(Tars$ProlifIndex)))), y = log2(Tars$median), group = Tars$all, color = Tars$CellType)) + geom_line(aes(linetype = factor(Tars$Replicate))) + geom_point() + geom_errorbar(width = 0.1, aes(ymin = log2(Tars$lowerCI), ymax = log2(Tars$higherCI))) + scale_color_manual(values = c("#538135", "#903B6F")) + ylab("log2(TPM)") + xlab("") + theme_bw() + theme(legend.title = element_blank(), plot.title = element_text(hjust = 0.5)) + ggtitle("Tars")
+TarsPlot 
+ggsave(TarsPlot, filename = "Tars_2018.pdf", width = 4, height = 4)
+
+```
+
+
+```{r}
+Columns2Keep2018S1 <- c("HH_median", "HH_lowerCI95", "HH_higherCI95") 
+Columns2Keep2018F1 <- c("HL_median", "HL_lowerCI95", "HL_higherCI95")
+Columns2Keep2018S2 <- c("MH_median", "MH_lowerCI95", "MH_higherCI95")
+Columns2Keep2018F2 <- c("ML_median", "ML_lowerCI95", "ML_higherCI95")
+
+NewColNames <- c("median", "lowerCI", "higherCI")
+
+Tnfrsf21FIB18S1 <- FIB2018[FIB2018$X == "ENSMUSG00000023915", Columns2Keep2018S1]
+Tnfrsf21FIB18F1 <- FIB2018[FIB2018$X == "ENSMUSG00000023915", Columns2Keep2018F1]
+Tnfrsf21FIB18S2 <- FIB2018[FIB2018$X == "ENSMUSG00000023915", Columns2Keep2018S2]
+Tnfrsf21FIB18F2 <- FIB2018[FIB2018$X == "ENSMUSG00000023915", Columns2Keep2018F2]
+colnames(Tnfrsf21FIB18S1) <- NewColNames
+colnames(Tnfrsf21FIB18F1) <- NewColNames
+colnames(Tnfrsf21FIB18S2) <- NewColNames
+colnames(Tnfrsf21FIB18F2) <- NewColNames
+
+Tnfrsf21ESC18S1 <- ESC2018[ESC2018$X == "ENSMUSG00000023915", Columns2Keep2018S1]
+Tnfrsf21ESC18F1 <- ESC2018[ESC2018$X == "ENSMUSG00000023915", Columns2Keep2018F1]
+Tnfrsf21ESC18S2 <- ESC2018[ESC2018$X == "ENSMUSG00000023915", Columns2Keep2018S2]
+Tnfrsf21ESC18F2 <- ESC2018[ESC2018$X == "ENSMUSG00000023915", Columns2Keep2018F2]
+colnames(Tnfrsf21ESC18S1) <- NewColNames
+colnames(Tnfrsf21ESC18F1) <- NewColNames
+colnames(Tnfrsf21ESC18S2) <- NewColNames
+colnames(Tnfrsf21ESC18F2) <- NewColNames
+
+Tnfrsf21 <- smartbind(Tnfrsf21FIB18S1, Tnfrsf21FIB18F1, Tnfrsf21FIB18S2, Tnfrsf21FIB18F2, Tnfrsf21ESC18S1, Tnfrsf21ESC18F1, Tnfrsf21ESC18S2, Tnfrsf21ESC18F2)
+
+ProlifIndex <- rep(c("Slow", "Fast"), 4)
+CellType <- rep(c(rep("FIB", 4), rep("ESC", 4)))
+Replicate <- rep(c(rep(1, 2), rep(2, 2)), 2)
+
+Tnfrsf21$ProlifIndex <- ProlifIndex
+Tnfrsf21$CellType <- CellType
+Tnfrsf21$Replicate <- Replicate 
+Tnfrsf21$all <- paste(CellType, Replicate)
+```
+
+```{r}
+Tnfrsf21Plot <- ggplot(Tnfrsf21, aes(x = factor(Tnfrsf21$ProlifIndex, levels = rev(levels(factor(Tnfrsf21$ProlifIndex)))), y = log2(Tnfrsf21$median), group = Tnfrsf21$all, color = Tnfrsf21$CellType)) + geom_line(aes(linetype = factor(Tnfrsf21$Replicate))) + geom_point() + geom_errorbar(width = 0.1, aes(ymin = log2(Tnfrsf21$lowerCI), ymax = log2(Tnfrsf21$higherCI))) + scale_color_manual(values = c("#538135", "#903B6F")) + ylab("log2(TPM)") + xlab("") + theme_bw() + theme(legend.title = element_blank(), plot.title = element_text(hjust = 0.5)) + ggtitle("Tnfrsf21")
+Tnfrsf21Plot
+ggsave(Tnfrsf21Plot, filename = "Tnfrsf21_2018.pdf", width = 4, height = 4)
+
+```

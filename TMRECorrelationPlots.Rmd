@@ -1,0 +1,76 @@
+
+Script to generate correlation plots between replicates. 
+
+Load packages. 
+
+```{r}
+require(ggplot2)
+require(ggpubr)
+```
+
+Load FIB files; replace expression values lower than 0.001 with 0.001 and calculate log2 TPM. 
+
+```{r}
+FIB <- read.table("FIB_TMRESep2018.tsv", sep = "\t", header = TRUE, row.names = 1)
+FIB[FIB < 0.001] <- 0.001
+FIB <- log2(FIB)
+```
+
+Create 2 dataframes, one for each population (low TMRE and high TMRE)
+
+```{r}
+highFIB <- FIB[, c(grep("high_median", names(FIB), value=TRUE))]
+lowFIB <- FIB[, c(grep("low_median", names(FIB), value=TRUE))]
+```
+
+Load ESC files; replace expression values lower than 0.001 with 0.001 and calculate log2 TPM. 
+
+```{r}
+ESC <- read.table("ES_TMRESep2018.tsv", sep = "\t", header = TRUE, row.names = 1)
+ESC[ESC < 0.001] <- 0.001
+ESC <- log2(ESC)
+```
+
+Create 2 dataframes, one for each population (low TMRE and high TMRE)
+
+```{r}
+highESC <- ESC[, c(grep("high_median", names(ESC), value=TRUE))]
+lowESC <- ESC[, c(grep("low_median", names(ESC), value=TRUE))]
+```
+
+We want to plot compare each replicate to the others.
+
+```{r}
+Combinations <- combn(x = c(1, 2, 3, 4), m = 2) #To use the apply function we need a matrix with the pairwise combinations of all the replicates. 
+```
+
+Plot each pair of replicates. 
+
+```{r}
+#ESC Low TMRE population 
+ESC_LowPlots <- apply(Combinations, 2, function(i) ggplot(lowESC, aes(x = lowESC[, i[1]], y = lowESC[, i[2]])) + geom_point() + xlab(paste("log2(TPM) Replicate", i[1])) + ylab(paste("log2(TPM) Replicate", i[2])) + ggtitle("Low ESC") + theme_bw() + theme(plot.title = element_text(hjust = 0.5)) + stat_cor(method = "pearson", label.x = 1))
+
+lapply(c(1:length(ESC_LowPlots)), function(i) ggsave(filename = paste("Cor_LowESC", i, ".pdf"), plot = ESC_LowPlots[[i]], device = "pdf")) #save files 
+
+#ESC High TMRE population                  
+ESC_HighPlots <- apply(Combinations, 2, function(i) ggplot(highESC, aes(x = highESC[, i[1]], y = highESC[, i[2]])) + geom_point() + xlab(paste("log2(TPM) Replicate", i[1])) + ylab(paste("log2(TPM) Replicate", i[2])) + ggtitle("High ESC") + theme_bw() + theme(plot.title = element_text(hjust = 0.5)) + stat_cor(method = "pearson", label.x = 1))
+
+lapply(c(1:length(ESC_HighPlots)), function(i) ggsave(filename = paste("Cor_HighESC", i, ".pdf"), plot = ESC_HighPlots[[i]], device = "pdf")) #save files
+
+#FIB Low TMRE population 
+FIB_LowPlots <- apply(Combinations, 2, function(i) ggplot(lowFIB, aes(x = lowFIB[, i[1]], y = lowFIB[, i[2]])) + geom_point() + xlab(paste("log2(TPM) Replicate", i[1])) + ylab(paste("log2(TPM) Replicate", i[2])) + ggtitle("Low FIB") + theme_bw() + theme(plot.title = element_text(hjust = 0.5)) + stat_cor(method = "pearson", label.x = 1))
+
+lapply(c(1:length(FIB_LowPlots)), function(i) ggsave(filename = paste("Cor_LowFIB", i, ".pdf"), plot = FIB_LowPlots[[i]], device = "pdf")) #save files
+```
+
+We need to create a new combinatory matrix because we only have 3 replicates of FIB high TMRE. (In the other cases we had 4 reps).  
+
+```{r}
+Combinations <- combn(x = c(1, 2, 3), m = 2)
+
+#FIB high TMRE population 
+FIB_HighPlots <- apply(Combinations, 2, function(i) ggplot(highFIB, aes(x = highFIB[, i[1]], y = highFIB[, i[2]])) + geom_point() + xlab(paste("log2(TPM) Replicate", i[1])) + ylab(paste("log2(TPM) Replicate", i[2])) + ggtitle("High FIB") + theme_bw() + theme(plot.title = element_text(hjust = 0.5)) + stat_cor(method = "pearson", label.x = 1))
+
+lapply(c(1:length(FIB_HighPlots)), function(i) ggsave(filename = paste("Cor_HighFIB", i, ".pdf"), plot = FIB_HighPlots[[i]], device = "pdf"))
+```
+

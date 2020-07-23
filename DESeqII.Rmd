@@ -1,0 +1,420 @@
+---
+title: "DEseq2 -- Analysis Expression Proliferation Correlation Expression"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r, include = FALSE}
+library(SummarizedExperiment)
+library(DESeq2)
+library(ggplot2)
+library(limma)
+```
+
+We want to add a new rowData item in our Summarized Experiment objects. To do it we import the previous object and we build a new one using the old (previous .rds) and new one. In this case we will add Gene Name data. Gene Name data is the ENS_id of each gene but without the last 3 characters. It's important to have gene names in this format for further operations that will be carried out later on. 
+(In this specific case we would only need to modify rowData, but I'll build all three items (assays, rowData and colData), to exemplify it completely)
+
+```{r}
+#FIB
+FIBobj <- readRDS("FIB.rds")
+Gene_name <- substr(rowData(FIBobj)$ENS_id, 1, 18)
+NewFIBRowData <- data.frame(rowData(FIBobj), Gene_name, row.names = rownames(FIBobj))
+FIBobj1 <- SummarizedExperiment(assays = list(counts = assays(FIBobj)$counts))
+rowData(FIBobj1) <- NewFIBRowData
+colData(FIBobj1) <- colData(FIBobj)
+FIBobj1
+
+#ESC
+ESCobj <- readRDS("ESCobj.rds")
+Gene_name <- substr(rowData(ESCobj)$ENS_id, 1, 18) #Not really necessary because both objects have the same gene names in the same order, but just in case.
+NewESCRowData <- data.frame(rowData(ESCobj), Gene_name, row.names = rownames(ESCobj))
+ESCobj1 <- SummarizedExperiment(assays = list(counts = assays(ESCobj)$counts))
+rowData(ESCobj1) <- NewESCRowData
+colData(ESCobj1) <- colData(ESCobj)
+ESCobj1
+
+```
+
+We will save it and from now on, use it (more practical). 
+
+```{r}
+saveRDS(object = ESCobj1, file = "ESCobj1.rds")
+saveRDS(object = FIBobj1, file = "FIBobj1.rds")
+```
+
+#Yeast object (w/data from van Dijk paper)
+
+```{r}
+YeastTab <- read.table("FitFlowRNAseq.tab.tsv", header = TRUE)
+AssaysYeast <- cbind(YeastTab$SlowFPKM, YeastTab$FastFPKM)
+YeastObj <- SummarizedExperiment(assays=list(counts=AssaysYeast))
+TranscriptName <- YeastTab$TranscriptID
+rowData(YeastObj) <- TranscriptName
+rownames(YeastObj) <- TranscriptName
+colnames(YeastObj) <- c("SlowFPKM", "FastFPKM")
+columnDataYeast <- DataFrame(ProliferationState=c("Slow FPKM", "Fast FPKM"))
+colData(YeastObj) <- columnDataYeast
+saveRDS(file = "Yeast_vanDijk.rds", object = YeastObj)
+```
+
+-------------------------------------------------------------------------------------------------------------------------
+
+Read the files
+
+```{r}
+ESCobj1 <- readRDS(file = "ESCobj1.rds")
+FIBobj1 <- readRDS(file = "FIBobj1.rds")
+YeastObj1 <- readRDS(file = "Yeast_vanDijk.rds")
+```
+
+**Distribution of expression levels across genes**
+
+Before any filtering, only changed 0 for 0.001
+
+```{r}
+assays(ESCobj1)$counts[assays(ESCobj1)$counts < 0.001] <- 0.001
+ESCobj1 <- ESCobj1[rowData(ESCobj1)$CoincBehavClass != "TPM CIs Zero", ]
+assays(FIBobj1)$counts[assays(FIBobj1)$counts < 0.001] <- 0.001
+FIBobj1 <- FIBobj1[rowData(FIBobj1)$CoincBehavClass != "TPM CIs Zero", ]
+
+#FIB
+Slow_MeanFIB <- rowMeans(log2(assays(FIBobj1)$counts[, c(1, 4)]))
+Proliferation <- "SlowFIB"
+Slow_MeanFIB <- data.frame(Slow_MeanFIB, Proliferation)
+colnames(Slow_MeanFIB) <- c("MeanExpression", "Proliferation")
+Medium_MeanFIB <- rowMeans(log2(assays(FIBobj1)$counts[, c(2, 5)]))
+Proliferation <- "MediumFIB"
+Medium_MeanFIB <- data.frame(Medium_MeanFIB, Proliferation)
+colnames(Medium_MeanFIB) <- c("MeanExpression", "Proliferation")
+Fast_MeanFIB <- rowMeans(log2(assays(FIBobj1)$counts[, c(3, 6)]))
+Proliferation <- "FastFIB"
+Fast_MeanFIB <- data.frame(Fast_MeanFIB, Proliferation)
+colnames(Fast_MeanFIB) <- c("MeanExpression", "Proliferation")
+FIBdf <- rbind(Slow_MeanFIB, Medium_MeanFIB, Fast_MeanFIB)
+colnames(FIBdf) <- c("MeanExpression", "Proliferation")
+FIBdf <- data.frame(FIBdf)
+plot_explevelsFIB <- ggplot(FIBdf, aes(x = FIBdf[, 1], group = FIBdf[, 2], color = FIBdf[, 2])) + geom_density()
+plot_explevelsFIB <- plot_explevelsFIB + xlab("Mean Expression (log2CPM)") + theme_bw() + theme(legend.title = element_blank())
+
+#ESC
+Slow_MeanESC <- rowMeans(log2(assays(ESCobj1)$counts[, c(1, 4)]))
+Proliferation <- "SlowESC"
+Slow_MeanESC <- data.frame(Slow_MeanESC, Proliferation)
+colnames(Slow_MeanESC) <- c("MeanExpression", "Proliferation")
+Medium_MeanESC <- rowMeans(log2(assays(ESCobj1)$counts[, c(2, 5)]))
+Proliferation <- "MediumESC"
+Medium_MeanESC <- data.frame(Medium_MeanESC, Proliferation)
+colnames(Medium_MeanESC) <- c("MeanExpression", "Proliferation")
+Fast_MeanESC <- rowMeans(log2(assays(ESCobj1)$counts[, c(3, 6)]))
+Proliferation <- "FastESC"
+Fast_MeanESC <- data.frame(Fast_MeanESC, Proliferation)
+colnames(Fast_MeanESC) <- c("MeanExpression", "Proliferation")
+ESCdf <- rbind(Slow_MeanESC, Medium_MeanESC, Fast_MeanESC)
+colnames(ESCdf) <- c("MeanExpression", "Proliferation")
+ESCdf <- data.frame(ESCdf)
+plot_explevelsESC <- ggplot(ESCdf, aes(x = ESCdf[, 1], group = ESCdf[, 2], color = ESCdf[, 2])) + geom_density()
+plot_explevelsESC <- plot_explevelsESC + xlab("Mean Expression (log2CPM)") + theme_bw() + theme(legend.title = element_blank())
+```
+
+
+```{r}
+
+#ESC
+
+Proliferation <- "SlowESC1"
+Slow_MeanESC1 <- data.frame(log2(assays(ESCobj1)$counts[, 1]), Proliferation)
+colnames(Slow_MeanESC1) <- c("MeanExpression", "Proliferation")
+Proliferation <- "SlowESC2"
+Slow_MeanESC2 <- data.frame(log2(assays(ESCobj1)$counts[, 4]), Proliferation)
+colnames(Slow_MeanESC2) <- c("MeanExpression", "Proliferation")
+Proliferation <- "MediumESC1"
+Medium_MeanESC1 <- data.frame(log2(assays(ESCobj1)$counts[, 2]), Proliferation)
+colnames(Medium_MeanESC1) <- c("MeanExpression", "Proliferation")
+Proliferation <- "MediumESC2"
+Medium_MeanESC2 <- data.frame(log2(assays(ESCobj1)$counts[, 5]), Proliferation)
+colnames(Medium_MeanESC2) <- c("MeanExpression", "Proliferation")
+Proliferation <- "FastESC1"
+Fast_MeanESC1 <- data.frame(log2(assays(ESCobj1)$counts[, 3]), Proliferation)
+colnames(Fast_MeanESC1) <- c("MeanExpression", "Proliferation")
+Proliferation <- "FastESC2"
+Fast_MeanESC2 <- data.frame(log2(assays(ESCobj1)$counts[, 6]), Proliferation)
+colnames(Fast_MeanESC2) <- c("MeanExpression", "Proliferation")
+ESCdf1 <- rbind(Slow_MeanESC1, Slow_MeanESC2, Medium_MeanESC1, Medium_MeanESC2, Fast_MeanESC1, Fast_MeanESC2)
+ESCdf1 <- data.frame(ESCdf1)
+
+plot_explevelsESC1 <- ggplot(ESCdf1, aes(x = ESCdf1[, 1], group = ESCdf1[, 2], color = ESCdf1[, 2])) + geom_density()
+plot_explevelsESC1 <- plot_explevelsESC1 + xlab("Mean Expression (log2CPM)") + theme_bw() + theme(legend.title = element_blank())
+
+
+#FIB
+
+Proliferation <- "SlowFIB1"
+Slow_MeanFIB1 <- data.frame(log2(assays(FIBobj1)$counts[, 1]), Proliferation)
+colnames(Slow_MeanFIB1) <- c("MeanExpression", "Proliferation")
+Proliferation <- "SlowFIB2"
+Slow_MeanFIB2 <- data.frame(log2(assays(FIBobj1)$counts[, 4]), Proliferation)
+colnames(Slow_MeanFIB2) <- c("MeanExpression", "Proliferation")
+Proliferation <- "MediumFIB1"
+Medium_MeanFIB1 <- data.frame(log2(assays(FIBobj1)$counts[, 2]), Proliferation)
+colnames(Medium_MeanFIB1) <- c("MeanExpression", "Proliferation")
+Proliferation <- "MediumFIB2"
+Medium_MeanFIB2 <- data.frame(log2(assays(FIBobj1)$counts[, 5]), Proliferation)
+colnames(Medium_MeanFIB2) <- c("MeanExpression", "Proliferation")
+Proliferation <- "FastFIB1"
+Fast_MeanFIB1 <- data.frame(log2(assays(FIBobj1)$counts[, 3]), Proliferation)
+colnames(Fast_MeanFIB1) <- c("MeanExpression", "Proliferation")
+Proliferation <- "FastFIB2"
+Fast_MeanFIB2 <- data.frame(log2(assays(FIBobj1)$counts[, 6]), Proliferation)
+colnames(Fast_MeanFIB2) <- c("MeanExpression", "Proliferation")
+FIBdf1 <- rbind(Slow_MeanFIB1, Slow_MeanFIB2, Medium_MeanFIB1, Medium_MeanFIB2, Fast_MeanFIB1, Fast_MeanFIB2)
+FIBdf1 <- data.frame(FIBdf1)
+
+plot_explevelsFIB1 <- ggplot(FIBdf1, aes(x = FIBdf1[, 1], group = FIBdf1[, 2], color = FIBdf1[, 2])) + geom_density()
+plot_explevelsFIB1 <- plot_explevelsFIB1 + xlab("Mean Expression (log2CPM)") + theme_bw() + theme(legend.title = element_blank())
+
+```
+
+We filter out low expressed genes in at least one of the replicates (cutoff: 0.5)
+
+```{r}
+ESCobj1 <- ESCobj1[rowMeans(assays(ESCobj1)$counts[, c(1,3)]) >= 0.5, ]
+ESCobj1 <- ESCobj1[rowMeans(assays(ESCobj1)$counts[, c(4,6)]) >= 0.5, ]
+FIBobj1 <- FIBobj1[rowMeans(assays(FIBobj1)$counts[, c(1,3)]) >= 0.5, ]
+FIBobj1 <- FIBobj1[rowMeans(assays(FIBobj1)$counts[, c(4,6)]) >= 0.5, ]
+
+#FIB
+Slow_MeanFIB <- rowMeans(log2(assays(FIBobj1)$counts[, c(1, 4)]))
+Proliferation <- "SlowFIB"
+Slow_MeanFIB <- data.frame(Slow_MeanFIB, Proliferation)
+colnames(Slow_MeanFIB) <- c("MeanExpression", "Proliferation")
+Medium_MeanFIB <- rowMeans(log2(assays(FIBobj1)$counts[, c(2, 5)]))
+Proliferation <- "MediumFIB"
+Medium_MeanFIB <- data.frame(Medium_MeanFIB, Proliferation)
+colnames(Medium_MeanFIB) <- c("MeanExpression", "Proliferation")
+Fast_MeanFIB <- rowMeans(log2(assays(FIBobj1)$counts[, c(3, 6)]))
+Proliferation <- "FastFIB"
+Fast_MeanFIB <- data.frame(Fast_MeanFIB, Proliferation)
+colnames(Fast_MeanFIB) <- c("MeanExpression", "Proliferation")
+FIBdf <- rbind(Slow_MeanFIB, Medium_MeanFIB, Fast_MeanFIB)
+colnames(FIBdf) <- c("MeanExpression", "Proliferation")
+FIBdf <- data.frame(FIBdf)
+plot_explevelsFIB <- ggplot(FIBdf, aes(x = FIBdf[, 1], group = FIBdf[, 2], color = FIBdf[, 2])) + geom_density()
+plot_explevelsFIB <- plot_explevelsFIB + xlab("Mean Expression (log2CPM)") + theme_bw() + theme(legend.title = element_blank()) + xlim(c(-15, 15))
+plot_explevelsFIB
+
+#ESC
+Slow_MeanESC <- rowMeans(log2(assays(ESCobj1)$counts[, c(1, 4)]))
+Proliferation <- "SlowESC"
+Slow_MeanESC <- data.frame(Slow_MeanESC, Proliferation)
+colnames(Slow_MeanESC) <- c("MeanExpression", "Proliferation")
+Medium_MeanESC <- rowMeans(log2(assays(ESCobj1)$counts[, c(2, 5)]))
+Proliferation <- "MediumESC"
+Medium_MeanESC <- data.frame(Medium_MeanESC, Proliferation)
+colnames(Medium_MeanESC) <- c("MeanExpression", "Proliferation")
+Fast_MeanESC <- rowMeans(log2(assays(ESCobj1)$counts[, c(3, 6)]))
+Proliferation <- "FastESC"
+Fast_MeanESC <- data.frame(Fast_MeanESC, Proliferation)
+colnames(Fast_MeanESC) <- c("MeanExpression", "Proliferation")
+ESCdf <- rbind(Slow_MeanESC, Medium_MeanESC, Fast_MeanESC)
+colnames(ESCdf) <- c("MeanExpression", "Proliferation")
+ESCdf <- data.frame(ESCdf)
+plot_explevelsESC <- ggplot(ESCdf, aes(x = ESCdf[, 1], group = ESCdf[, 2], color = ESCdf[, 2])) + geom_density()
+plot_explevelsESC <- plot_explevelsESC + xlab("Mean Expression (log2CPM)") + theme_bw() + theme(legend.title = element_blank()) + xlim(c(-15, 15))
+plot_explevelsESC
+
+```
+
+```{r}
+
+#ESC
+
+Proliferation <- "SlowESC1"
+Slow_MeanESC1 <- data.frame(log2(assays(ESCobj1)$counts[, 1]), Proliferation)
+colnames(Slow_MeanESC1) <- c("MeanExpression", "Proliferation")
+Proliferation <- "SlowESC2"
+Slow_MeanESC2 <- data.frame(log2(assays(ESCobj1)$counts[, 4]), Proliferation)
+colnames(Slow_MeanESC2) <- c("MeanExpression", "Proliferation")
+Proliferation <- "MediumESC1"
+Medium_MeanESC1 <- data.frame(log2(assays(ESCobj1)$counts[, 2]), Proliferation)
+colnames(Medium_MeanESC1) <- c("MeanExpression", "Proliferation")
+Proliferation <- "MediumESC2"
+Medium_MeanESC2 <- data.frame(log2(assays(ESCobj1)$counts[, 5]), Proliferation)
+colnames(Medium_MeanESC2) <- c("MeanExpression", "Proliferation")
+Proliferation <- "FastESC1"
+Fast_MeanESC1 <- data.frame(log2(assays(ESCobj1)$counts[, 3]), Proliferation)
+colnames(Fast_MeanESC1) <- c("MeanExpression", "Proliferation")
+Proliferation <- "FastESC2"
+Fast_MeanESC2 <- data.frame(log2(assays(ESCobj1)$counts[, 6]), Proliferation)
+colnames(Fast_MeanESC2) <- c("MeanExpression", "Proliferation")
+ESCdf1 <- rbind(Slow_MeanESC1, Slow_MeanESC2, Medium_MeanESC1, Medium_MeanESC2, Fast_MeanESC1, Fast_MeanESC2)
+ESCdf1 <- data.frame(ESCdf1)
+
+plot_explevelsESC1 <- ggplot(ESCdf1, aes(x = ESCdf1[, 1], group = ESCdf1[, 2], color = ESCdf1[, 2])) + geom_density()
+plot_explevelsESC1 <- plot_explevelsESC1 + xlab("Mean Expression (log2CPM)") + theme_bw() + theme(legend.title = element_blank()) + xlim(c(-15, 15))
+plot_explevelsESC1
+
+
+#FIB
+
+Proliferation <- "SlowFIB1"
+Slow_MeanFIB1 <- data.frame(log2(assays(FIBobj1)$counts[, 1]), Proliferation)
+colnames(Slow_MeanFIB1) <- c("MeanExpression", "Proliferation")
+Proliferation <- "SlowFIB2"
+Slow_MeanFIB2 <- data.frame(log2(assays(FIBobj1)$counts[, 4]), Proliferation)
+colnames(Slow_MeanFIB2) <- c("MeanExpression", "Proliferation")
+Proliferation <- "MediumFIB1"
+Medium_MeanFIB1 <- data.frame(log2(assays(FIBobj1)$counts[, 2]), Proliferation)
+colnames(Medium_MeanFIB1) <- c("MeanExpression", "Proliferation")
+Proliferation <- "MediumFIB2"
+Medium_MeanFIB2 <- data.frame(log2(assays(FIBobj1)$counts[, 5]), Proliferation)
+colnames(Medium_MeanFIB2) <- c("MeanExpression", "Proliferation")
+Proliferation <- "FastFIB1"
+Fast_MeanFIB1 <- data.frame(log2(assays(FIBobj1)$counts[, 3]), Proliferation)
+colnames(Fast_MeanFIB1) <- c("MeanExpression", "Proliferation")
+Proliferation <- "FastFIB2"
+Fast_MeanFIB2 <- data.frame(log2(assays(FIBobj1)$counts[, 6]), Proliferation)
+colnames(Fast_MeanFIB2) <- c("MeanExpression", "Proliferation")
+FIBdf1 <- rbind(Slow_MeanFIB1, Slow_MeanFIB2, Medium_MeanFIB1, Medium_MeanFIB2, Fast_MeanFIB1, Fast_MeanFIB2)
+FIBdf1 <- data.frame(FIBdf1)
+
+plot_explevelsFIB1 <- ggplot(FIBdf1, aes(x = FIBdf1[, 1], group = FIBdf1[, 2], color = FIBdf1[, 2])) + geom_density()
+plot_explevelsFIB1 <- plot_explevelsFIB1 + xlab("Mean Expression (log2CPM)") + theme_bw() + theme(legend.title = element_blank()) + xlim(c(-15, 15))
+plot_explevelsFIB1
+```
+
+**Fold change distributions**
+
+```{r}
+
+#ESC
+FC_ESC1 <- log2(assays(ESCobj1)$counts[ ,3]) - log2(assays(ESCobj1)$counts[ ,1])
+Replicate <- "Rep1"
+FC_ESC1 <- data.frame(FC_ESC1, Replicate)
+colnames(FC_ESC1) <- c("FoldChange", "Replicate")
+FC_ESC2 <- log2(assays(ESCobj1)$counts[ ,6]) - log2(assays(ESCobj1)$counts[ ,4])
+Replicate <- "Rep2"
+FC_ESC2 <- data.frame(FC_ESC2, Replicate)
+colnames(FC_ESC2) <- c("FoldChange", "Replicate")
+FC_ESCdf <- rbind(FC_ESC1, FC_ESC2)
+FC_ESCdf <- data.frame(FC_ESCdf)
+
+plot_FoldChangeESC1 <- ggplot(FC_ESCdf, aes(x = FC_ESCdf[, 1], group = FC_ESCdf[, 2], color = FC_ESCdf[, 2])) + geom_density()
+plot_FoldChangeESC1 <- plot_FoldChangeESC1 + xlab("log2 FC (Fast/slow)") + theme_bw() + theme(legend.title = element_blank()) + xlim(c(-10, 10))
+plot_FoldChangeESC1
+
+
+
+#FIB
+FC_FIB1 <- log2(assays(FIBobj1)$counts[ ,3]) - log2(assays(FIBobj1)$counts[ ,1])
+Replicate <- "Rep1"
+FC_FIB1 <- data.frame(FC_FIB1, Replicate)
+colnames(FC_FIB1) <- c("FoldChange", "Replicate")
+FC_FIB2 <- log2(assays(FIBobj1)$counts[ ,6]) - log2(assays(FIBobj1)$counts[ ,4])
+Replicate <- "Rep2"
+FC_FIB2 <- data.frame(FC_FIB2, Replicate)
+colnames(FC_FIB2) <- c("FoldChange", "Replicate")
+FC_FIBdf <- rbind(FC_FIB1, FC_FIB2)
+FC_FIBdf <- data.frame(FC_FIBdf)
+
+plot_FoldChangeFIB1 <- ggplot(FC_FIBdf, aes(x = FC_FIBdf[, 1], group = FC_FIBdf[, 2], color = FC_FIBdf[, 2])) + geom_density()
+plot_FoldChangeFIB1 <- plot_FoldChangeFIB1 + xlab("log2 FC (Fast/slow)") + theme_bw() + theme(legend.title = element_blank()) + xlim(c(-10, 10))
+plot_FoldChangeFIB1
+
+
+```
+
+As we are only interested in the differences between slow and fast populations, we will drop the medium proliferation column 
+
+```{r}
+#ESCobj1 <- ESCobj1[, c(1, 3, 4, 6)]
+#FIBobj1 <- FIBobj1[, c(1, 3, 4, 6)]
+```
+
+#DEA 
+
+1. Build the design matrix: 
+
+```{r}
+design_matrixESC <- model.matrix(~ProliferationIndex, data = colData(ESCobj1))
+design_matrixFIB <- model.matrix(~ProliferationIndex, data = colData(FIBobj1))
+```
+
+2, 3. Fit linear regression model and calculate moderate t-statistics:
+
+!! Important: if we don't substitute 0 values for 0.0001 in the counts matrix we will have an error: Partial NA coefficients for XXX probe(s). 
+
+```{r}
+fitESC <- lmFit(log2(assays(ESCobj1)$counts), design_matrixESC)
+fitESC <- eBayes(fitESC)
+
+fitFIB <- lmFit(log2(assays(FIBobj1)$counts), design_matrixFIB)
+fitFIB <- eBayes(fitFIB)
+
+resFIB <- decideTests(fitFIB, p.value = 0.01)
+summary(resFIB)
+ttFIB <- topTable(fitFIB, coef = 2, n = Inf)
+head(ttFIB)
+
+resESC <- decideTests(fitESC, p.value = 0.01)
+summary(resESC)
+ttESC <- topTable(fitESC, coef = 2, n = Inf)
+head(ttESC)
+
+```
+
+**Volcano plot**
+
+```{r}
+ttFIB$log10.P.Val <- log10(ttFIB$P.Value) * (-1)
+ttFIB$significance <- ttFIB$log10.P.Val >= -1 * log10(0.01)
+VolcanoFIB <- ggplot(ttFIB, aes(logFC, log10.P.Val, color = significance)) +
+  geom_point() + 
+  theme_bw() + 
+  scale_y_continuous(limits = c(0, 10), expand = c(0,0)) +
+  scale_x_continuous(breaks = c(-10, -5, 0, 5, 10)) +
+  scale_color_manual(values = c("#e88c8c", "#b62525")) +
+  labs(x = "log2 (fold-change)", y = "-log10 (p-value)")
+VolcanoFIB
+
+ttESC$log10.P.Val <- log10(ttESC$P.Value) * (-1)
+ttESC$significance <- ttESC$log10.P.Val >= -1 * log10(0.01)
+VolcanoESC <- ggplot(ttESC, aes(logFC, log10.P.Val, color = significance)) +
+  geom_point() + 
+  theme_bw() + 
+  scale_y_continuous(limits = c(0, 10), expand = c(0,0)) +
+  scale_x_continuous(breaks = c(-10, -5, 0, 5, 10)) +
+  scale_color_manual(values = c("#e88c8c", "#b62525")) +
+  labs(x = "log2 (fold-change)", y = "-log10 (p-value)")
+VolcanoESC
+```
+
+If we trust the volcano plots, we should take into account "top" left & right. 
+
+```{r}
+#FIB 
+
+ttFIB1 <- ttFIB[ttFIB$logFC > 1 & ttFIB$significance == TRUE || ttFIB$logFC < -1 & ttFIB$significance == TRUE, ]
+dim(ttFIB)
+FIB2GOrilla <- substr(row.names(ttFIB), 1, 18)
+write.table(substr(rowData(FIBobj1)$ENS_id, 1, 18), quote = FALSE, sep = "\t", row.names = FALSE, file = "TargetFIB2GOrilla.tsv")
+write.table(substr(rowData(FIBobj1)$ENS_id, 1, 18), quote = FALSE, sep = "\t", row.names = FALSE, file = "BackgroundFIB2GOrilla.tsv")
+```
+
+
+
+
+
+#EXPLORATORY ANALYSIS
+
+##PCA 
+(Let's see how our samples cluster)
+To apply R function prcomp we need the following data format (columns: samples, rows: attributes/genes). In ESC: PC1 seems to separate by proliferation state and PC3 separates by replicate. 
+
+```{r}
+library(ggfortify)
+ESC2PCA <- t(log2(assays(ESCobj1)$counts))
+PCA_ESC <- prcomp(ESC2PCA)
+autoplot(prcomp(ESC2PCA, center = TRUE), x = 3, y = 2, data = ESC2PCA, label = TRUE)
+```
+

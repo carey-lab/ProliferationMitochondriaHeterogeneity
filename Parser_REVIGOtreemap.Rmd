@@ -1,0 +1,48 @@
+---
+title: "REVIGO_treemap"
+output: html_document
+---
+
+```{r}
+library(treemap)
+library(psych)
+GOpattern <- '."),$'
+```
+
+```{r}
+TreemapREVIGOPlotter <- function(file, name) {
+  source(file)
+  pdf(file= paste(name, ".pdf"), width=16, height=9) # width and height are in inches
+
+# check the treemap command documentation for all possible parameters - there are a lot more
+  treemap(
+  	stuff,
+  	index = c("representative", "description"),
+  	vSize = "abslog10pvalue",
+  	vColor = "representative",
+  	title = paste("REVIGO Go treemap", name),
+  	inflate.labels = FALSE,      # set this to TRUE for space-filling group labels - good for posters
+  	lowerbound.cex.labels = 0,   # try to draw as many labels as possible (still, some small squares may not get a label)
+  	bg.labels = "#CCCCCC00",     # define background color of group labels
+  												       # "#CCCCCC00" is fully transparent, "#CCCCCCAA" is semi-transparent grey, NA is opaque
+  	position.legend = "none",
+  	force.print.labels = TRUE,
+  	overlap.labels = 0.5,
+  	align.labels = list(c("left", "top"), c("center", "center")),
+  	drop.unused.levels = TRUE
+  )
+  
+  dev.off()
+
+    }
+
+```
+
+
+```{r}
+list_files <- list.files(path = ".", pattern = "^.*treemap.r$")
+
+apply(as.data.frame(list_files), 1, function(i) TreemapREVIGOPlotter(file = i, name = as.character(i)))  
+```
+
+

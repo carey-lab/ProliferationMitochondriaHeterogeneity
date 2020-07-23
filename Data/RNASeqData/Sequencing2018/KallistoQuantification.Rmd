@@ -1,0 +1,20 @@
+
+Transferring files from CRG page to MARVIN. 
+--user: username
+--password: password to access the site
+
+```{bash}
+wget --user SerenaFrancescaGeneroso --password d3cWkiK? -r -A .gz http://seq.crg.es/download/external/Miro/Lucas_Carey/Serena_Francesca_Generoso/2018-09-03_BCCFN0ANXX
+```
+
+Just an example to run it in MARVIN cluster, we need to repeat this process for each one of the samples. 
+-i: index used to quantify. 
+-o: output folder name 
+(after that we put the 2 fastq files to quantify)
+-b: number of bootstraps (I used 500 like in the first sequencing)
+
+```{bash}
+sbatch --wrap "module load kallisto/0.42.3 ; kallisto quant -i gencode.VM18.transcript.kidx -o VM18_Fibro_ML_28876_TAGCTT.kout Fibro_ML_28876_TAGCTT_read1.fastq.gz Fibro_ML_28876_TAGCTT_read2.fastq.gz -b 500"
+```
+
+

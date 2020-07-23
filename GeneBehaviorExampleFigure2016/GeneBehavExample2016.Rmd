@@ -1,0 +1,193 @@
+
+Load packages.
+
+```{r}
+require(ggplot2)
+require(reshape2)
+require(gtools)
+```
+
+Load RNA counts files from both experiments and uniformize gene ID. 
+FIB2016 & ESC2016: first sequencing experiment. 
+
+```{r}
+FIB2016 <- read.csv("FIBBehavGroups.tsv", sep = "\t", header = TRUE)
+FIB2016$X <- substr(FIB2016$X, 1, 18)
+ESC2016 <- read.csv("ESCBehavGroups.tsv", sep = "\t", header = TRUE)
+ESC2016$X <- substr(ESC2016$X, 1, 18)
+```
+
+With this figure we want to exemplify the possible gene behaviors that we can find in our samples:
+* Increasing with proliferation in both samples: Tars - threonyl-tRNA synthetase - ENS: ENSMUSG00000022241
+* Decreasing with proliferation in both samples: Pmaip1 - phorbol-12-myristate-13-acetate-induced protein 1 - ENS: ENSMUSG00000022241
+* Opposite behavior in both samples: Tnfrsf21 - tumor necrosis factor receptor superfamily, member 21 - ENS: ENSMUSG00000023915). 
+
+We will use only the columns of our interest in this sample.
+
+```{r}
+Columns2Keep2016S1 <- c("S1_TPM", "S1_TPM_95CI_low", "S1_TPM_95CI_high") #Slow replicate 1
+Columns2Keep2016M1 <- c("M1_TPM", "M1_TPM_95CI_low", "M1_TPM_95CI_high") #Med replicate 1
+Columns2Keep2016F1 <- c("F1_TPM", "F1_TPM_95CI_low", "F1_TPM_95CI_high") #Fast replicate 1
+Columns2Keep2016S2 <- c("S2_TPM", "S2_TPM_95CI_low", "S2_TPM_95CI_high") #Slow replicate 2
+Columns2Keep2016M2 <- c("M2_TPM", "M2_TPM_95CI_low", "M2_TPM_95CI_high") #Med replicate 2
+Columns2Keep2016F2 <- c("F2_TPM", "F2_TPM_95CI_low", "F2_TPM_95CI_high") #Fast replicate 2
+
+NewColNames <- c("median", "lowerCI", "higherCI")
+```
+
+We keep only expression values of the genes of interest. 
+
+*Pmaip1*
+
+```{r}
+PmaipFIB16S1 <- FIB2016[FIB2016$X == "ENSMUSG00000024521", Columns2Keep2016S1]
+PmaipFIB16M1 <- FIB2016[FIB2016$X == "ENSMUSG00000024521", Columns2Keep2016M1]
+PmaipFIB16F1 <- FIB2016[FIB2016$X == "ENSMUSG00000024521", Columns2Keep2016F1]
+PmaipFIB16S2 <- FIB2016[FIB2016$X == "ENSMUSG00000024521", Columns2Keep2016S2]
+PmaipFIB16M2 <- FIB2016[FIB2016$X == "ENSMUSG00000024521", Columns2Keep2016M2]
+PmaipFIB16F2 <- FIB2016[FIB2016$X == "ENSMUSG00000024521", Columns2Keep2016F2]
+
+colnames(PmaipFIB16S1) <- NewColNames
+colnames(PmaipFIB16M1) <- NewColNames
+colnames(PmaipFIB16F1) <- NewColNames
+colnames(PmaipFIB16S2) <- NewColNames
+colnames(PmaipFIB16M2) <- NewColNames
+colnames(PmaipFIB16F2) <- NewColNames
+
+PmaipESC16S1 <- ESC2016[ESC2016$X == "ENSMUSG00000024521", Columns2Keep2016S1]
+PmaipESC16M1 <- ESC2016[ESC2016$X == "ENSMUSG00000024521", Columns2Keep2016M1]
+PmaipESC16F1 <- ESC2016[ESC2016$X == "ENSMUSG00000024521", Columns2Keep2016F1]
+PmaipESC16S2 <- ESC2016[ESC2016$X == "ENSMUSG00000024521", Columns2Keep2016S2]
+PmaipESC16M2 <- ESC2016[ESC2016$X == "ENSMUSG00000024521", Columns2Keep2016M2]
+PmaipESC16F2 <- ESC2016[ESC2016$X == "ENSMUSG00000024521", Columns2Keep2016F2]
+colnames(PmaipESC16S1) <- NewColNames
+colnames(PmaipESC16M1) <- NewColNames
+colnames(PmaipESC16F1) <- NewColNames
+colnames(PmaipESC16S2) <- NewColNames
+colnames(PmaipESC16M2) <- NewColNames
+colnames(PmaipESC16F2) <- NewColNames
+
+#Build a dataframe to plot. 
+Pmaip <- smartbind(PmaipFIB16S1, PmaipFIB16M1, PmaipFIB16F1, PmaipFIB16S2, PmaipFIB16M2, PmaipFIB16F2, PmaipESC16S1, PmaipESC16M1, PmaipESC16F1, PmaipESC16S2, PmaipESC16M2, PmaipESC16F2)
+
+ProlifIndex <- rep(c("Slow", "Med", "Fast"), 4)
+CellType <- rep(c(rep("FIB", 6), rep("ESC", 6)))
+Replicate <- rep(c(rep(1, 3), rep(2, 3)), 2)
+
+Pmaip$ProlifIndex <- ProlifIndex
+Pmaip$CellType <- CellType
+Pmaip$Replicate <- Replicate 
+Pmaip$all <- paste(CellType, Replicate)
+```
+
+Plot and save. 
+
+```{r}
+PmaipPlot <- ggplot(Pmaip, aes(x = factor(Pmaip$ProlifIndex, levels = rev(levels(factor(Pmaip$ProlifIndex)))), y = log2(Pmaip$median), group = Pmaip$all, color = Pmaip$CellType)) + geom_line(aes(linetype = factor(Pmaip$Replicate))) + geom_point() + geom_errorbar(width = 0.05, aes(ymin = log2(Pmaip$lowerCI), ymax = log2(Pmaip$higherCI))) + scale_color_manual(values = c("#538135", "#903B6F")) + ylab("log2(TPM)") + xlab("") + theme_bw() + theme(legend.title = element_blank(), plot.title = element_text(hjust = 0.5)) + ggtitle("Pmaip1")
+PmaipPlot
+ggsave(PmaipPlot, filename = "Pmaip1_2016.pdf", width = 4, height = 4)
+```
+
+*Tars*
+
+```{r}
+TarsFIB16S1 <- FIB2016[FIB2016$X == "ENSMUSG00000022241", Columns2Keep2016S1]
+TarsFIB16M1 <- FIB2016[FIB2016$X == "ENSMUSG00000022241", Columns2Keep2016M1]
+TarsFIB16F1 <- FIB2016[FIB2016$X == "ENSMUSG00000022241", Columns2Keep2016F1]
+TarsFIB16S2 <- FIB2016[FIB2016$X == "ENSMUSG00000022241", Columns2Keep2016S2]
+TarsFIB16M2 <- FIB2016[FIB2016$X == "ENSMUSG00000022241", Columns2Keep2016M2]
+TarsFIB16F2 <- FIB2016[FIB2016$X == "ENSMUSG00000022241", Columns2Keep2016F2]
+
+colnames(TarsFIB16S1) <- NewColNames
+colnames(TarsFIB16M1) <- NewColNames
+colnames(TarsFIB16F1) <- NewColNames
+colnames(TarsFIB16S2) <- NewColNames
+colnames(TarsFIB16M2) <- NewColNames
+colnames(TarsFIB16F2) <- NewColNames
+
+TarsESC16S1 <- ESC2016[ESC2016$X == "ENSMUSG00000022241", Columns2Keep2016S1]
+TarsESC16M1 <- ESC2016[ESC2016$X == "ENSMUSG00000022241", Columns2Keep2016M1]
+TarsESC16F1 <- ESC2016[ESC2016$X == "ENSMUSG00000022241", Columns2Keep2016F1]
+TarsESC16S2 <- ESC2016[ESC2016$X == "ENSMUSG00000022241", Columns2Keep2016S2]
+TarsESC16M2 <- ESC2016[ESC2016$X == "ENSMUSG00000022241", Columns2Keep2016M2]
+TarsESC16F2 <- ESC2016[ESC2016$X == "ENSMUSG00000022241", Columns2Keep2016F2]
+colnames(TarsESC16S1) <- NewColNames
+colnames(TarsESC16M1) <- NewColNames
+colnames(TarsESC16F1) <- NewColNames
+colnames(TarsESC16S2) <- NewColNames
+colnames(TarsESC16M2) <- NewColNames
+colnames(TarsESC16F2) <- NewColNames
+
+#Build a dataframe to plot. 
+
+Tars <- smartbind(TarsFIB16S1, TarsFIB16M1, TarsFIB16F1, TarsFIB16S2, TarsFIB16M2, TarsFIB16F2, TarsESC16S1, TarsESC16M1, TarsESC16F1, TarsESC16S2, TarsESC16M2, TarsESC16F2)
+
+ProlifIndex <- rep(c("Slow", "Med", "Fast"), 4)
+CellType <- rep(c(rep("FIB", 6), rep("ESC", 6)))
+Replicate <- rep(c(rep(1, 3), rep(2, 3)), 2)
+
+Tars$ProlifIndex <- ProlifIndex
+Tars$CellType <- CellType
+Tars$Replicate <- Replicate 
+Tars$all <- paste(CellType, Replicate)
+```
+
+Plot and save. 
+
+```{r}
+TarsPlot <- ggplot(Tars, aes(x = factor(Tars$ProlifIndex, levels = rev(levels(factor(Tars$ProlifIndex)))), y = log2(Tars$median), group = Tars$all, color = Tars$CellType)) + geom_line(aes(linetype = factor(Tars$Replicate))) + geom_point() + geom_errorbar(width = 0.05, aes(ymin = log2(Tars$lowerCI), ymax = log2(Tars$higherCI))) + scale_color_manual(values = c("#538135", "#903B6F")) + ylab("log2(TPM)") + xlab("") + theme_bw() + theme(legend.title = element_blank(), plot.title = element_text(hjust = 0.5)) + ggtitle("Tars")
+TarsPlot
+ggsave(TarsPlot, filename = "Tars_2016.pdf", width = 4, height = 4)
+```
+
+*Tnfrsf21*
+
+```{r}
+Tnfrsf21FIB16S1 <- FIB2016[FIB2016$X == "ENSMUSG00000023915", Columns2Keep2016S1]
+Tnfrsf21FIB16M1 <- FIB2016[FIB2016$X == "ENSMUSG00000023915", Columns2Keep2016M1]
+Tnfrsf21FIB16F1 <- FIB2016[FIB2016$X == "ENSMUSG00000023915", Columns2Keep2016F1]
+Tnfrsf21FIB16S2 <- FIB2016[FIB2016$X == "ENSMUSG00000023915", Columns2Keep2016S2]
+Tnfrsf21FIB16M2 <- FIB2016[FIB2016$X == "ENSMUSG00000023915", Columns2Keep2016M2]
+Tnfrsf21FIB16F2 <- FIB2016[FIB2016$X == "ENSMUSG00000023915", Columns2Keep2016F2]
+
+colnames(Tnfrsf21FIB16S1) <- NewColNames
+colnames(Tnfrsf21FIB16M1) <- NewColNames
+colnames(Tnfrsf21FIB16F1) <- NewColNames
+colnames(Tnfrsf21FIB16S2) <- NewColNames
+colnames(Tnfrsf21FIB16M2) <- NewColNames
+colnames(Tnfrsf21FIB16F2) <- NewColNames
+
+Tnfrsf21ESC16S1 <- ESC2016[ESC2016$X == "ENSMUSG00000023915", Columns2Keep2016S1]
+Tnfrsf21ESC16M1 <- ESC2016[ESC2016$X == "ENSMUSG00000023915", Columns2Keep2016M1]
+Tnfrsf21ESC16F1 <- ESC2016[ESC2016$X == "ENSMUSG00000023915", Columns2Keep2016F1]
+Tnfrsf21ESC16S2 <- ESC2016[ESC2016$X == "ENSMUSG00000023915", Columns2Keep2016S2]
+Tnfrsf21ESC16M2 <- ESC2016[ESC2016$X == "ENSMUSG00000023915", Columns2Keep2016M2]
+Tnfrsf21ESC16F2 <- ESC2016[ESC2016$X == "ENSMUSG00000023915", Columns2Keep2016F2]
+colnames(Tnfrsf21ESC16S1) <- NewColNames
+colnames(Tnfrsf21ESC16M1) <- NewColNames
+colnames(Tnfrsf21ESC16F1) <- NewColNames
+colnames(Tnfrsf21ESC16S2) <- NewColNames
+colnames(Tnfrsf21ESC16M2) <- NewColNames
+colnames(Tnfrsf21ESC16F2) <- NewColNames
+
+#Build a dataframe to plot. 
+
+Tnfrsf21 <- smartbind(Tnfrsf21FIB16S1, Tnfrsf21FIB16M1, Tnfrsf21FIB16F1, Tnfrsf21FIB16S2, Tnfrsf21FIB16M2, Tnfrsf21FIB16F2, Tnfrsf21ESC16S1, Tnfrsf21ESC16M1, Tnfrsf21ESC16F1, Tnfrsf21ESC16S2, Tnfrsf21ESC16M2, Tnfrsf21ESC16F2)
+
+ProlifIndex <- rep(c("Slow", "Med", "Fast"), 4)
+CellType <- rep(c(rep("FIB", 6), rep("ESC", 6)))
+Replicate <- rep(c(rep(1, 3), rep(2, 3)), 2)
+
+Tnfrsf21$ProlifIndex <- ProlifIndex
+Tnfrsf21$CellType <- CellType
+Tnfrsf21$Replicate <- Replicate 
+Tnfrsf21$all <- paste(CellType, Replicate)
+```
+
+Plot and save. 
+
+```{r}
+Tnfrsf21Plot <- ggplot(Tnfrsf21, aes(x = factor(Tnfrsf21$ProlifIndex, levels = rev(levels(factor(Tnfrsf21$ProlifIndex)))), y = log2(Tnfrsf21$median), group = Tnfrsf21$all, color = Tnfrsf21$CellType)) + geom_line(aes(linetype = factor(Tnfrsf21$Replicate))) + geom_point() + geom_errorbar(width = 0.05, aes(ymin = log2(Tnfrsf21$lowerCI), ymax = log2(Tnfrsf21$higherCI))) + scale_color_manual(values = c("#538135", "#903B6F")) + ylab("log2(TPM)") + xlab("") + theme_bw() + theme(legend.title = element_blank(), plot.title = element_text(hjust = 0.5)) + ggtitle("Tnfrsf21")
+Tnfrsf21Plot
+ggsave(Tnfrsf21Plot, filename = "Tnfrsf21_2016.pdf", width = 4, height = 4)
+```
