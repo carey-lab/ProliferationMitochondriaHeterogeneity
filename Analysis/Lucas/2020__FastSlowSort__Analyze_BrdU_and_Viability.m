@@ -1,205 +1,58 @@
-%% load data
-WORKDIR  = '~/Develop/GrowthPredictionTMRE/' ;
-BRDU = [ WORKDIR 'Data/2020__FastSlowSort__Brdu_data.xlsx' ] ;
+%% load viability data
+WORKDIR  = '~/Develop/ProliferationMitochondriaHeterogeneity/' ;
 VIAB = [ WORKDIR 'Data/2020__FastSlowSort__viability_data.xlsx' ] ;
 
-%% look at viability
-F1 = readtable( VIAB , 'Sheet' , 'Fibro replicate 1');
-F2 = readtable( VIAB , 'Sheet' , 'Fibro replicate 2');
-E1 = readtable( VIAB , 'Sheet' , 'ESC replicate 1');
-E2 = readtable( VIAB , 'Sheet' , 'ESC replicate 2');
-
-F = F1 ; 
-F(:,3:end) = array2table( (table2array(F1(:,3:end)) + table2array(F2(:,3:end)) ) ./ 2  ) ;
-
-E = E1 ; 
-E(:,3:end) = array2table( (table2array(E1(:,3:end)) + table2array(E2(:,3:end)) ) ./ 2  ) ;
-
-%% look at BrdU
-E = readtable( BRDU , 'Sheet' , 'BrdU_ESC');
-F = readtable( BRDU , 'Sheet' , 'BrdU_Fibro');
-E = E( ~isnan(E.Replicate1),:);
-F = F( ~isnan(F.Replicate1),:);
-E.CellsInS = mean([E.Replicate1,E.Replicate2],2) ;
-F.CellsInS = mean([F.Replicate1,F.Replicate2],2) ;
-
-E.Type = regexprep(E.Type,' cells','');
-F.Type = regexprep(F.Type,' cells','');
-
-F.Speed = categorical( regexprep(F.Type,' .*','') );
-E.Speed = categorical( regexprep(E.Type,' .*','') );
-F.Drug = categorical( regexprep(F.Type,'.* ','') );
-E.Drug = categorical( regexprep(E.Type,'.* ','') );
-E.Day = categorical(E.Day);
-F.Day = categorical(F.Day);
-
-%% plot averages FIB
-figure; 
-
-tiledlayout(2,3)
-
-nexttile;
-gscatter(F.O_N(1:4),F.O_N(5:8),F.Drug(1:4),'kbgr',[],30);
-xlabel('FAST')
-ylabel('SLOW')
-line(xlim,xlim)
-title('FIB O/N')
-
-nexttile;
-gscatter(F.Day2(1:4),F.Day2(5:8),F.Drug(1:4),'kbgr',[],30);
-xlabel('FAST')
-ylabel('SLOW')
-line(xlim,xlim)
-title('FIB Day 2')
-
-nexttile;
-gscatter(F.Day3(1:4),F.Day3(5:8),F.Drug(1:4),'kbgr',[],30);
-xlabel('FAST')
-ylabel('SLOW')
-line(xlim,xlim)
-title('FIB Day 3')
-
-nexttile;
-gscatter(F.Day4(1:4),F.Day4(5:8),F.Drug(1:4),'kbgr',[],30);
-xlabel('FAST')
-ylabel('SLOW')
-line(xlim,xlim)
-title('FIB Day 4')
+T = readtable( VIAB , 'Sheet' , 'Viability');
+T = T( ~regexpcmp(T.Drug,'\+'),:);
 
 
-nexttile;
-gscatter(F.Day5(1:4),F.Day5(5:8),F.Drug(1:4),'kbgr',[],30);
-xlabel('FAST')
-ylabel('SLOW')
-line(xlim,xlim)
-title('FIB Day 5')
+T.Speed = categorical(T.Speed);
+T.Drug = categorical(T.Drug);
+T.CellType = categorical(T.CellType);
 
-%% plot average ESC
-clrs = 'kbgr';
-figure; 
+U = stack(T,T.Properties.VariableNames(3:end-2)) ;
+U.Properties.VariableNames{5} = 'Day';
+U.Properties.VariableNames{6} = 'Viab';
+U.Day = cellfun(@(X)str2double(regexprep(X,'Day','')),string(U.Day));
+%
+U = U(U.Day>0,:)
 
-tiledlayout(2,2)
+figure;
+clrs = get(gca,'ColorOrder');
+boxplot(U.Viab, {U.CellType,U.Drug,U.Speed},'Colors',clrs([1 2],:),'FactorGap',[10,10,0])
+ylabel('Viability')
 
-nexttile; hold on ;
-gscatter(E.O_N(1:4),E.O_N(5:8),E.Drug(1:4),clrs,[],30);
-for I = 1:numel(clrs)
-    ph1 = plot(E1.O_N(I),E1.O_N(I+4),'+','Color',clrs(I));
-    ph2 = plot(E2.O_N(I),E2.O_N(I+4),'+','Color',clrs(I));
-    set(ph1,'HandleVisibility','off')
-    set(ph2,'HandleVisibility','off')
+%%
+
+%%
+figname = '~/Downloads/viability_boxplts_' ;
+
+for drugname = {'Antimycin' 'Oligomycin' 'DMSO'}
+    drugname = drugname{:}; 
+    for celltype = {'ESC' 'FIB'}
+    
+    celltype = celltype{:};
+    
+    Q = U(U.Drug==drugname & U.CellType == celltype , : );
+    [~,p] = ttest2(Q.Viab(Q.Speed=='Fast cells'),Q.Viab(Q.Speed=='Slow cells'));
+
+    figure('Position',[100 100 200 200]);
+    hold on ;
+    clrs = get(gca,'ColorOrder');
+    bh = boxplot(Q.Viab,Q.Speed,'widths',0.8);
+    ylabel('Viability    (% BrdU^+)');
+    title( sprintf('%s +%s p=%0.04f',celltype, drugname , p ) )
+    line(xlim,[0 0],'LineStyle','--','Color',[.7 .7 .7])
+    
+    h = findobj(gca,'Tag','Box');
+    patch(get(h(1),'XData'),get(h(1),'YData'),clrs(2,:),'FaceAlpha',1);
+    patch(get(h(2),'XData'),get(h(2),'YData'),clrs(1,:),'FaceAlpha',1);
+   
+    xlabel('CFSE sort')
+    ylim([50,100])
+    
+    print('-dpng',[figname '_box_' drugname '_' celltype '.png'] , '-r600')
+    close;
+    
+    end
 end
-xlabel('FAST')
-ylabel('SLOW')
-xlim([40 100]);ylim(xlim);
-line(xlim,xlim,'HandleVisibility','off');
-title('ESC O/N')
-
-nexttile;hold on ;
-gscatter(E.Day2(1:4),E.Day2(5:8),E.Drug(1:4),clrs,[],30);
-for I = 1:numel(clrs)
-    ph1 = plot(E1.Day2(I),E1.Day2(I+4),'+','Color',clrs(I));
-    ph2 = plot(E2.Day2(I),E2.Day2(I+4),'+','Color',clrs(I));
-    set(ph1,'HandleVisibility','off')
-    set(ph2,'HandleVisibility','off')
-end
-xlabel('FAST')
-ylabel('SLOW')
-xlim([40 100]);ylim(xlim);
-line(xlim,xlim,'HandleVisibility','off');
-title('ESC Day 2')
-legend('location','sw')
-
-nexttile;hold on ;
-gscatter(E.Day3(1:4),E.Day3(5:8),E.Drug(1:4),clrs,[],30);
-for I = 1:numel(clrs)
-    ph1 = plot(E1.Day3(I),E1.Day3(I+4),'+','Color',clrs(I));
-    ph2 = plot(E2.Day3(I),E2.Day3(I+4),'+','Color',clrs(I));
-    set(ph1,'HandleVisibility','off')
-    set(ph2,'HandleVisibility','off')
-end
-xlabel('FAST')
-ylabel('SLOW')
-xlim([40 100]);ylim(xlim);
-line(xlim,xlim,'HandleVisibility','off');
-title('ESC Day 3')
-
-
-%% plot average FIB
-clrs = 'kbgr';
-figure; 
-
-tiledlayout(2,3)
-
-nexttile; hold on ;
-gscatter(F.O_N(1:4),F.O_N(5:8),F.Drug(1:4),clrs,[],30);
-for I = 1:numel(clrs)
-    ph1 = plot(F1.O_N(I),F1.O_N(I+4),'+','Color',clrs(I));
-    ph2 = plot(F2.O_N(I),F2.O_N(I+4),'+','Color',clrs(I));
-    set(ph1,'HandleVisibility','off')
-    set(ph2,'HandleVisibility','off')
-end
-xlabel('FAST')
-ylabel('SLOW')
-xlim([40 100]);ylim(xlim);
-line(xlim,xlim,'HandleVisibility','off');
-title('FIB O/N')
-
-
-nexttile;hold on ;
-gscatter(F.Day2(1:4),F.Day2(5:8),F.Drug(1:4),clrs,[],30);
-for I = 1:numel(clrs)
-    ph1 = plot(F1.Day2(I),F1.Day2(I+4),'+','Color',clrs(I));
-    ph2 = plot(F2.Day2(I),F2.Day2(I+4),'+','Color',clrs(I));
-    set(ph1,'HandleVisibility','off')
-    set(ph2,'HandleVisibility','off')
-end
-xlabel('FAST')
-ylabel('SLOW')
-xlim([40 100]);ylim(xlim);
-line(xlim,xlim,'HandleVisibility','off');
-title('FIB Day 2')
-
-nexttile;hold on ;
-gscatter(F.Day3(1:4),F.Day3(5:8),F.Drug(1:4),clrs,[],30);
-for I = 1:numel(clrs)
-    ph1 = plot(F1.Day3(I),F1.Day3(I+4),'+','Color',clrs(I));
-    ph2 = plot(F2.Day3(I),F2.Day3(I+4),'+','Color',clrs(I));
-    set(ph1,'HandleVisibility','off')
-    set(ph2,'HandleVisibility','off')
-end
-xlabel('FAST')
-ylabel('SLOW')
-xlim([40 100]);ylim(xlim);
-line(xlim,xlim,'HandleVisibility','off');
-title('FIB Day 3')
-
-
-
-nexttile;hold on ;
-gscatter(F.Day4(1:4),F.Day4(5:8),F.Drug(1:4),clrs,[],30);
-for I = 1:numel(clrs)
-    ph1 = plot(F1.Day4(I),F1.Day4(I+4),'+','Color',clrs(I));
-    ph2 = plot(F2.Day4(I),F2.Day4(I+4),'+','Color',clrs(I));
-    set(ph1,'HandleVisibility','off')
-    set(ph2,'HandleVisibility','off')
-end
-xlabel('FAST')
-ylabel('SLOW')
-xlim([40 100]);ylim(xlim);
-line(xlim,xlim,'HandleVisibility','off');
-title('FIB Day 4')
-
-
-nexttile;hold on ;
-gscatter(F.Day5(1:4),F.Day5(5:8),F.Drug(1:4),clrs,[],30);
-for I = 1:numel(clrs)
-    ph1 = plot(F1.Day5(I),F1.Day5(I+4),'+','Color',clrs(I));
-    ph2 = plot(F2.Day5(I),F2.Day5(I+4),'+','Color',clrs(I));
-    set(ph1,'HandleVisibility','off')
-    set(ph2,'HandleVisibility','off')
-end
-xlabel('FAST')
-ylabel('SLOW')
-xlim([40 100]);ylim(xlim);
-line(xlim,xlim,'HandleVisibility','off');
-title('FIB Day 5')
